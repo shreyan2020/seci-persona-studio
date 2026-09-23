@@ -1,247 +1,69 @@
 # SECI Persona Studio
 
-SECI Persona Studio is a desktop research workspace for exploring underspecified biotech questions with persona-guided reasoning, literature evidence, project memory, and draft/report workflows.
+A research workspace for turning an underspecified biotech question into a project with literature evidence, explicit judgments, and working drafts. Users explore questions through collaborator personas, inspect evidence, and retain context as a project develops.
 
-The current Windows installer is:
+The application combines a Next.js interface, a FastAPI backend, local models through Ollama, and an Electron desktop shell. It also includes retrieval and extraction evaluation tools.
 
-`frontend/dist/SECI-Persona-Studio-0.1.0-x64.exe`
+## Explore the code
 
-## What Stakeholders Can Do
+| Path | Purpose |
+| --- | --- |
+| [`frontend/`](frontend/) | Research interface and Electron application |
+| [`backend/`](backend/) | Project state, literature workflows, reasoning, and report generation |
+| [`backend/evals/`](backend/evals/) | Retrieval and extraction evaluation runners |
+| [`docker-compose.yml`](docker-compose.yml) | Server deployment with a report worker and Ollama |
 
-- Create and open research projects.
-- Add project goals, target hosts, and desired end products.
-- Explore a question through collaborator personas and objective modes.
-- Review literature-backed findings and evidence trails.
-- Capture judgment calls, gaps, proposal seeds, and working drafts.
-- Open project journey summaries that show how a project evolved.
-- Generate and review report drafts from the workspace.
+## Run locally
 
-## Install the Windows App
-
-### Prerequisites
-
-Install these before launching the app:
-
-1. Python 3.11 or newer, available on PATH.
-2. The backend Python dependencies.
-3. Ollama from https://ollama.com.
-4. The Ollama model used by the app.
-
-Install backend dependencies from the project folder:
-
-```powershell
-cd backend
-pip install -r requirements.txt
-```
-
-Recommended model setup:
-
-```powershell
-ollama pull qwen2.5:7b
-ollama serve
-```
-
-If `ollama serve` says Ollama is already running, that is fine.
-
-### Install
-
-1. Open `frontend/dist`.
-2. Run `SECI-Persona-Studio-0.1.0-x64.exe`.
-3. Choose an install location when prompted.
-4. Launch **SECI Persona Studio** from the installer, Start Menu, or desktop shortcut.
-
-Windows may show a security warning because the installer is locally built and not code-signed with an organization certificate. Choose **More info** and **Run anyway** only if you trust the source of this build.
-
-## First Launch
-
-On startup, the desktop app launches:
-
-- the bundled Next.js user interface,
-- the bundled FastAPI backend,
-- a local runtime data folder under the user's app data directory.
-
-Ollama is not bundled. Keep Ollama running locally while using AI-powered features.
-
-The app creates this editable config file on first launch:
-
-`%APPDATA%\SECI Persona Studio\app-config.json`
-
-Default config:
-
-```json
-{
-  "ollamaBaseUrl": "http://localhost:11434",
-  "ollamaModel": "qwen2.5:7b"
-}
-```
-
-To use another local Ollama model, pull it first, edit `ollamaModel`, and restart the app.
-
-## Basic Usage
-
-1. Launch **SECI Persona Studio**.
-2. Create or select a project.
-3. Define the project goal, target host, and desired end product.
-4. Add a research question.
-5. Select a collaborator persona and objective mode.
-6. Review generated objectives, evidence, gaps, judgments, and proposal seeds.
-7. Use the journey view to revisit prior exploration paths.
-8. Use report and draft tools to turn workspace findings into shareable outputs.
-
-## Troubleshooting
-
-### App Opens With a Startup Error
-
-Check that Python is installed and available:
-
-```powershell
-python --version
-```
-
-Then install backend dependencies if needed:
-
-```powershell
-cd backend
-pip install -r requirements.txt
-```
-
-### AI Responses Fail
-
-Check that Ollama is running:
-
-```powershell
-ollama serve
-```
-
-Check that the configured model exists:
-
-```powershell
-ollama list
-```
-
-If needed:
-
-```powershell
-ollama pull qwen2.5:7b
-```
-
-### Port Conflicts
-
-The backend uses `127.0.0.1:8000`. Close other local services using that port before launching the desktop app.
-
-## Server Deployment With Docker Compose
-
-The compose setup runs four services:
-
-- `nginx` on port `80`, the public entrypoint
-- `frontend` on Docker's internal network
-- `backend` on Docker's internal network
-- `worker` for report rendering jobs
-- `ollama` on Docker's internal network only, so it will not conflict with a host Ollama on port `11434`
-
-Create a deployment environment file from the example:
+Install Python 3.11+, Node.js, and Ollama. From the repository root:
 
 ```bash
-cp .env.example .env
-```
-
-For a simple server where users open `http://SERVER_HOST`, set:
-
-```env
-NGINX_BIND=0.0.0.0
-NGINX_PORT=80
-NEXT_PUBLIC_API_URL=/
-NEXT_PUBLIC_API_PORT=
-CORS_ORIGINS=http://SERVER_HOST
-```
-
-Using `NEXT_PUBLIC_API_URL=/` makes browser API calls stay on the same origin through nginx. If the API is behind a different domain, set `NEXT_PUBLIC_API_URL` to the full public API origin instead.
-
-Build and start:
-
-```bash
-docker compose up --build -d
-```
-
-Check the services:
-
-```bash
-docker compose ps
-docker compose logs -f backend frontend worker ollama
-```
-
-Pull the model inside the Ollama container before using AI-powered flows:
-
-```bash
-docker compose exec ollama ollama pull qwen2.5:7b-instruct
-```
-
-Open the app at `http://SERVER_HOST`. The proxied backend health check is available at `http://SERVER_HOST/health`.
-
-## Developer Setup
-
-### Run in Development Mode
-
-Install dependencies:
-
-```powershell
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r backend/requirements.txt
 cd frontend
-npm install
+npm ci
 ```
 
-Install backend dependencies:
+Start Ollama and pull the model used by the backend:
 
-```powershell
-cd ..\backend
-pip install -r requirements.txt
+```bash
+ollama pull qwen2.5:7b-instruct
+ollama serve
 ```
 
-Start the desktop development environment:
+If Ollama is already running, a second server is unnecessary. Start the API from the repository root in a separate terminal with the virtual environment activated:
 
-```powershell
-cd ..\frontend
-npm run desktop:dev
+```bash
+python -m uvicorn main:app --app-dir backend --host 127.0.0.1 --port 8000
 ```
 
-This starts:
+Then start the interface in another terminal:
 
-- FastAPI on `127.0.0.1:8000`
-- Next.js on `http://localhost:3000`
-- Electron as a desktop shell
-
-### Build the Windows Installer
-
-From `frontend`:
-
-```powershell
-npm run desktop:dist:win
+```bash
+cd frontend
+npm run dev
 ```
 
-If the global `npm` shim is broken, run the project-local commands directly:
+Open `http://localhost:3000`. The API health endpoint is `http://127.0.0.1:8000/health`.
 
-```powershell
-$env:NEXT_TELEMETRY_DISABLED='1'
-.\node_modules\.bin\next.cmd build
-.\node_modules\.bin\electron-builder.cmd --win nsis
+## Evaluate without a model server
+
+The bundled smoke suite runs retrieval and extraction checks on small local fixtures:
+
+```bash
+cd backend
+python -m evals.run_suite --config evals/suites/local_smoke.json --output-dir data/eval_runs/local_smoke
 ```
 
-The installer is written to `frontend/dist`.
+See the [evaluation guide](backend/evals/README.md) for data formats, metrics, and larger benchmark configurations. Passing the fixture suite checks the evaluation pipeline; it does not establish the quality of generated research findings.
 
-## Project Structure
+## Desktop and server builds
 
-```text
-frontend/              Next.js and Electron desktop app
-frontend/electron/     Electron main and preload scripts
-backend/               FastAPI backend and research services
-backend/data/          Local seed/demo data
-docker-compose.yml     Optional container setup
-```
+On Windows, `npm run desktop:dev` starts the desktop development environment. `npm run desktop:dist:win` builds a Windows installer into `frontend/dist`. An installer is a build output, not a file guaranteed to exist after cloning.
 
-## Notes for Sharing
+The Docker setup runs five services: nginx, frontend, backend, worker, and Ollama. Copy `.env.example` to `.env`, review the settings, then run `docker compose up --build -d`. The supplied Ollama service requests NVIDIA GPU access; adapt that setting for a CPU-only host. Pull the configured model with `docker compose exec ollama ollama pull qwen2.5:7b-instruct`.
 
-- Share the installer `.exe` from `frontend/dist`.
-- Share `frontend/dist/README-for-stakeholders.md` alongside the installer.
-- Tell stakeholders to install Python and Ollama first.
-- Tell stakeholders which Ollama model to pull.
-- Ask stakeholders to click **Export Diagnostics** from an open project if they see a failure, weak literature results, poor annotations, or a confusing generated draft.
-- Do not share local runtime data from `%APPDATA%` unless intentionally exporting a user-specific project state.
+## Research use
+
+Generated objectives, claims, and reports require review against the cited sources. Keep a record of model and dataset versions when comparing runs. This repository provides a research prototype and evaluation tools; it does not establish that persona-guided reasoning improves research outcomes.

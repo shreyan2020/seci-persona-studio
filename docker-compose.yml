@@ -57,7 +57,7 @@ services:
       - DATABASE_PATH=/data/dsm.db
       - ARTIFACT_ROOT=/data/artifacts
       - PERSONA_ROOT=/data/personas
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3:8b}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5:7b-instruct}
       - WORKER_POLL_SECONDS=2
       - RENDER_TIMEOUT_SECONDS=180
       - PYTHONUNBUFFERED=1
