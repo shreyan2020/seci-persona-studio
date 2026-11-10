@@ -1,0 +1,105 @@
+# Findings from the second research cycle
+
+The experiments test source selection and grounded comparative reading. They do not establish a novel ML method or solve cross-paper scientific reconciliation.
+
+The useful result is mixed ordinary/context negative sampling: +3.0 percentage points in top-passage annotation hits over ordinary training across three seeds on 985 additional test questions (paper-bootstrap interval +0.7 to +5.4 points). This is an empirical lead, not algorithmic novelty. Pure context sampling and the geometric acquisition gate did not beat the stronger matched baseline.
+
+## The three DSM requirements
+
+| Requirement | Implemented evidence | Remaining boundary |
+|---|---|---|
+| Collect relevant literature | ELISER terminology expansion with 13 source-backed mdh candidates; modern full-text passage retrieval | No claim of exhaustive literature recall or validated mechanistic expansion |
+| Align and reconcile context | Real ICO annotations, three-seed context/mixed learning, source-binding error review | Within-paper evaluation; cross-paper causal reconciliation remains unvalidated |
+| State knowns and uncertainties | Source-citing reader diagnostic, explicit unresolved context, source-level ELISER analysis | Citation existence and rationale overlap do not prove complete scientific synthesis |
+
+## Retrieval on real full-text papers
+
+Both trained selectors use the same pretrained MiniLM, 400 training papers, 1,041 questions and 2,082 positive/negative pairs. The context variant changes negative sampling. BGE is a stronger pretrained cross-encoder baseline, but receives no task-specific training.
+
+### 332 test papers / 1199 questions
+
+| Method | Hit@1 | Hit@3 | MRR |
+|---|---:|---:|---:|
+| bm25 | 27.8% | 56.6% | 0.466 |
+| dense | 30.9% | 55.3% | 0.477 |
+| rrf | 32.5% | 60.3% | 0.507 |
+| pretrained_mini | 25.3% | 47.2% | 0.420 |
+| bge | 42.8% | 72.9% | 0.601 |
+| ordinary | 63.5% | 90.5% | 0.772 |
+| context | 58.0% | 84.7% | 0.723 |
+
+Context minus ordinary hit@1: -5.4 percentage points; paper-bootstrap 95% interval [-8.9, -2.1]. Candidate recall ceiling: 96.7%.
+
+### 80 test papers / 214 questions
+
+| Method | Hit@1 | Hit@3 | MRR |
+|---|---:|---:|---:|
+| bm25 | 30.4% | 59.3% | 0.495 |
+| dense | 34.6% | 54.7% | 0.498 |
+| rrf | 35.5% | 61.7% | 0.530 |
+| pretrained_mini | 24.8% | 46.3% | 0.409 |
+| bge | 40.2% | 68.2% | 0.573 |
+| ordinary | 62.6% | 92.1% | 0.770 |
+| context | 65.4% | 85.5% | 0.765 |
+
+Context minus ordinary hit@1: +2.8 percentage points; paper-bootstrap 95% interval [-5.4, +10.7]. Candidate recall ceiling: 97.2%.
+
+## Iteration across three training seeds
+
+Additional test subset: 252 papers and 985 questions, excluding the inspected pilot.
+
+| Variant | Hit@1, mean across seeds | Hit@3, mean across seeds |
+|---|---:|---:|
+| ordinary | 61.7% | 88.9% |
+| context | 58.5% | 85.7% |
+| mixed | 64.7% | 89.8% |
+
+context_minus_ordinary, hit1: -3.1 points [-6.5, +0.1].
+
+context_minus_ordinary, hit3: -3.2 points [-5.2, -1.2].
+
+mixed_minus_ordinary, hit1: +3.0 points [+0.7, +5.4].
+
+mixed_minus_ordinary, hit3: +0.9 points [-0.6, +2.4].
+
+Intervals resample papers conditional on these three training seeds; they do not fully integrate training uncertainty. Mixed sampling was proposed after inspecting the pilot and evaluated on validation before the expanded test.
+
+## Local source-citing reader diagnostic
+
+Qwen3.5:9b (9.7B, Q4_K_M), thinking disabled, 512-token generation cap, 8,192-token context, temperature 0, seed 41 and explicit JSON/label instructions. Eight fixed papers, one question per paper, same reader and prompts across four evidence selectors. This is a diagnostic, not a statistically conclusive answer-quality benchmark or a stronger reasoning-model evaluation.
+
+| Evidence selector | Questions | Accuracy | Accuracy + annotation citation hit | Coverage |
+|---|---:|---:|---:|---:|
+| bge | 8 | 75.0% | 62.5% | 87.5% |
+| context | 8 | 75.0% | 75.0% | 87.5% |
+| mixed | 8 | 87.5% | 75.0% | 100.0% |
+| ordinary | 8 | 100.0% | 87.5% | 100.0% |
+
+The remote Qwen3-8B reader was interrupted after a saved response when another GPU workload expanded. A local thinking-enabled attempt exhausted its 3,072-token budget without a final answer. A subsequent format pilot omitted explicit label names in the prompt and produced invalid labels despite supplying a schema; its partial output is preserved separately. The fixed-case diagnostic was restarted with explicit label instructions. None of those partial runs is pooled with the final outputs. Invalid final outputs count as abstentions, not correct no-effect answers.
+
+## Learned acquisition gate and geometry ablation
+
+A CPU-only gate learns which trained selector to use from 40 validation papers (104 questions). Regularization is chosen by four-fold article-grouped cross-validation. Test labels do not enter fitting. This is an exploratory follow-up after inspecting earlier test results, not a new confirmatory holdout.
+
+| Gate features | Hit@1 outside pilot | Difference from fixed mixed |
+|---|---:|---:|
+| scores_uncertainty | 64.4% | -0.9 points |
+| plus_js | 64.6% | -0.7 points |
+| plus_fisher_rao | 63.8% | -1.5 points |
+| plus_both | 64.6% | -0.7 points |
+
+Neither the learned gate nor Fisher–Rao/JS rank-distribution features beat the fixed mixed selector in this experiment. These score distributions are not calibrated probabilities of scientific truth. Geometry has not earned a place in the contribution.
+
+## What this means for the research question
+
+The meaningful comparison is context-aware learning versus equally supervised ordinary learning. Beating a zero-shot reranker primarily demonstrates the value of domain adaptation. Information gain, gold-answer rewards, ICO conditioning and hard-negative learning already have close precedents; see NOVELTY.md. Full InfoReasoner GRPO was not reproduced.
+
+The unresolved candidate is a joint experimental-context/effect/source acquisition objective, tested against equally rich answer-only supervision. The implemented gate is a single-step selection policy over pretrained selectors; it is not a multi-step policy over joint experimental interpretations. No information-geometric advantage is established.
+
+## Limits and concrete domain result
+
+Gold-rationale overlap is incomplete annotation agreement, not independent entailment. Exact-text deduplication and official article splits do not rule out related trial families or model pretraining contamination. Test expansion includes the pilot; the additional subset is reported separately. The GPU was shared, so wall-clock comparisons are not isolated benchmarks.
+
+ELISER terminology expansion retrieves 13 mdh candidate papers for succinic acid, with source abstracts. Inspection separates computational deletion proposals, enzyme replacement and strain/process interventions. Modification direction is not measured effect direction. See DOMAIN_FINDINGS.md and results/eliser_search.json.
+
+All remote work remains under /home/sbiswas2/data/sticker-studio/evidence-acquisition.

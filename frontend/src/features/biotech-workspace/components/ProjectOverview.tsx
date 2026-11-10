@@ -2,16 +2,17 @@ import type { Project } from '@/features/biotech-workspace/types';
 
 interface ProjectOverviewProps {
   selectedProject: Project;
+  workingQuestion?: string;
 }
 
-export function ProjectOverview({ selectedProject }: ProjectOverviewProps) {
+export function ProjectOverview({ selectedProject, workingQuestion }: ProjectOverviewProps) {
   return (
     <section className="rounded-[1.75rem] border border-slate-200 bg-white/90 p-6 shadow-sm backdrop-blur">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="max-w-3xl">
           <div className="text-xs font-semibold uppercase tracking-[0.24em] text-emerald-700">Step 1 / Project Brief</div>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">{selectedProject.name}</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">{selectedProject.project_goal || 'No program goal captured yet.'}</p>
+
         </div>
 
         <div className="grid gap-2 sm:grid-cols-2">
@@ -27,10 +28,10 @@ export function ProjectOverview({ selectedProject }: ProjectOverviewProps) {
       </div>
 
       <div className="mt-4 grid gap-3 lg:grid-cols-3">
-        <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4">
+        {selectedProject.project_goal.trim() !== workingQuestion?.trim() && <div className="rounded-2xl border border-violet-200 bg-violet-50 p-4">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-violet-800">Project Goal</div>
           <div className="mt-2 text-sm text-violet-950">{selectedProject.project_goal || 'No project goal captured yet.'}</div>
-        </div>
+        </div>}
         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">Optional Cost Or Sourcing Context</div>
           <div className="mt-2 text-sm text-slate-800">

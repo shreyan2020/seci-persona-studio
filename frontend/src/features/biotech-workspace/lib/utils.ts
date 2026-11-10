@@ -164,77 +164,23 @@ export function createEmptyResearchWorkTemplate(initialQuery = ''): ResearchWork
   };
 }
 
-export function scorePersonaForObjective(persona: ProjectPersona, objectiveText: string) {
-  const text = objectiveText.toLowerCase();
-  const haystack = [
-    persona.workflow_stage,
-    persona.focus_area,
-    persona.summary,
-    ...persona.goals,
-    ...persona.workflow_focus,
-  ]
-    .join(' ')
-    .toLowerCase();
-
-  const keywordGroups: Record<string, string[]> = {
-    feedstock: ['feedstock', 'raw material', 'substrate', 'sourcing', 'supply', 'carbon source', 'cost'],
-    strain_engineering: ['experiment', 'engineering', 'pathway', 'gene', 'construct', 'biosynthesis', 'enzyme', 'strain'],
-    upstream_process: ['fermentation', 'media', 'bioreactor', 'culture', 'titer', 'yield', 'upstream', 'doe'],
-    downstream_processing: ['purification', 'recovery', 'extraction', 'separation', 'downstream', 'isolation'],
-    economics: ['economics', 'cost', 'commercial', 'margin', 'tea', 'scale', 'viability'],
-    analytics: [
-      'literature',
-      'benchmark',
-      'examples',
-      'strategies',
-      'review',
-      'latest',
-      'papers',
-      'challenges',
-      'open questions',
-      'data analysis',
-      'dataset',
-      'statistics',
-      'omics',
-      'correlation',
-    ],
-  };
-
-  let score = 0;
-  Object.entries(keywordGroups).forEach(([stage, keywords]) => {
-    const stageWeight = stage === persona.workflow_stage ? 2 : 1;
-    keywords.forEach((keyword) => {
-      if (text.includes(keyword) && haystack.includes(keyword)) {
-        score += stageWeight;
-      }
-    });
-  });
-
-  if (text.includes('draft experiment plan') && persona.workflow_stage === 'strain_engineering') score += 5;
-  if (text.includes('draft experiment plan') && persona.workflow_stage === 'upstream_process') score += 4;
-  if ((text.includes('literature') || text.includes('latest') || text.includes('examples')) && persona.workflow_stage === 'analytics') score += 6;
-  return score;
-}
-
-export function stageTone(stage: string) {
-  switch (stage) {
-    case 'feedstock':
-      return 'border-amber-300 bg-amber-50 text-amber-900';
-    case 'strain_engineering':
-      return 'border-emerald-300 bg-emerald-50 text-emerald-900';
-    case 'upstream_process':
-      return 'border-sky-300 bg-sky-50 text-sky-900';
-    case 'downstream_processing':
-      return 'border-fuchsia-300 bg-fuchsia-50 text-fuchsia-900';
-    case 'economics':
-      return 'border-slate-300 bg-slate-100 text-slate-900';
-    case 'analytics':
-      return 'border-violet-300 bg-violet-50 text-violet-900';
-    case 'regulatory_quality':
-      return 'border-rose-300 bg-rose-50 text-rose-900';
-    default:
-      return 'border-slate-300 bg-slate-50 text-slate-900';
-  }
+export function normalizeResearchWorkTemplate(value: Partial<ResearchWorkTemplate> | null | undefined, initialQuery = ''): ResearchWorkTemplate {
+  const result = { ...createEmptyResearchWorkTemplate(initialQuery), ...value };
+  result.initial_query = typeof value?.initial_query === 'string' && value.initial_query.trim() ? value.initial_query : initialQuery;
+  result.synthesis_memo = typeof value?.synthesis_memo === 'string' ? value.synthesis_memo : '';
+  result.literature_findings = (Array.isArray(value?.literature_findings) ? value.literature_findings : []).filter(Boolean).map(f => ({
+    ...f, citation: f.citation || '', relevance: f.relevance || '',
+    labels: Array.isArray(f.labels) ? f.labels : [],
+    knowns: Array.isArray(f.knowns) ? f.knowns : [],
+    unknowns: Array.isArray(f.unknowns) ? f.unknowns : [],
+    judgment_calls: Array.isArray(f.judgment_calls) ? f.judgment_calls : [],
+    validation_tracks: Array.isArray(f.validation_tracks) ? f.validation_tracks : [],
+  }));
+  result.common_gaps = Array.isArray(value?.common_gaps) ? value.common_gaps : [];
+  result.judgment_calls = Array.isArray(value?.judgment_calls) ? value.judgment_calls : [];
+  result.validation_tracks = Array.isArray(value?.validation_tracks) ? value.validation_tracks : [];
+  result.proposal_candidates = Array.isArray(value?.proposal_candidates) ? value.proposal_candidates : [];
+  return result;
 }
 
 export function getModeVisualKey(modeLabel: string) {

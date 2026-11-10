@@ -1,21 +1,16 @@
-import type { AgenticPlan, ObjectiveCluster, Project, ProjectPersona, ResearchWorkTemplate } from '@/features/biotech-workspace/types';
-import { classNames, humanize, stageTone } from '@/features/biotech-workspace/lib/utils';
+import type { ObjectiveCluster, Project, ResearchWorkTemplate } from '@/features/biotech-workspace/types';
+import { classNames } from '@/features/biotech-workspace/lib/utils';
 
 interface WorkflowStateSidebarProps {
   selectedProject: Project;
   focusQuestion: string;
-  selectedPersona: ProjectPersona | null;
   selectedObjective: ObjectiveCluster | null;
   researchWorkTemplate: ResearchWorkTemplate;
-  literatureReviewStage: 'review' | 'summary' | 'proposal' | 'draft';
-  agenticPlan: AgenticPlan | null;
+  literatureReviewStage: 'review' | 'summary';
   onEditQuestion: () => void;
-  onChangeCollaborator: () => void;
   onChangeObjective: () => void;
   onOpenLiteratureReview: () => void;
   onOpenLiteratureSummary: () => void;
-  onOpenProposalSynthesis: () => void;
-  onOpenDraft: () => void;
 }
 
 function SidebarRow({
@@ -60,18 +55,13 @@ function SidebarRow({
 export function WorkflowStateSidebar({
   selectedProject,
   focusQuestion,
-  selectedPersona,
   selectedObjective,
   researchWorkTemplate,
   literatureReviewStage,
-  agenticPlan,
   onEditQuestion,
-  onChangeCollaborator,
   onChangeObjective,
   onOpenLiteratureReview,
   onOpenLiteratureSummary,
-  onOpenProposalSynthesis,
-  onOpenDraft,
 }: WorkflowStateSidebarProps) {
   return (
     <aside className="rounded-none border border-slate-200 bg-white/95 shadow-[18px_0_70px_-55px_rgba(15,23,42,0.65)] backdrop-blur xl:sticky xl:top-3 xl:max-h-[calc(100vh-1.5rem)] xl:overflow-y-auto">
@@ -87,31 +77,6 @@ export function WorkflowStateSidebar({
         onAction={onEditQuestion}
         active={Boolean(focusQuestion.trim())}
       />
-
-      <div className={classNames('border-t border-slate-200 px-4 py-4', selectedPersona ? 'bg-white' : 'bg-slate-50/70')}>
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Collaborator</div>
-            <div className="mt-1 line-clamp-2 text-sm font-semibold leading-5 text-slate-950">
-              {selectedPersona?.name || 'Not selected'}
-            </div>
-          </div>
-          <button
-            onClick={onChangeCollaborator}
-            className="shrink-0 rounded-xl border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 transition hover:bg-slate-50"
-          >
-            Change
-          </button>
-        </div>
-        {selectedPersona && (
-          <div className="mt-3 space-y-2">
-            <span className={classNames('inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide', stageTone(selectedPersona.workflow_stage))}>
-              {humanize(selectedPersona.workflow_stage)}
-            </span>
-            <div className="line-clamp-3 text-xs leading-5 text-slate-600">{selectedPersona.focus_area}</div>
-          </div>
-        )}
-      </div>
 
       <SidebarRow
         label="Objective Mode"
@@ -148,23 +113,6 @@ export function WorkflowStateSidebar({
         current={literatureReviewStage === 'summary'}
       />
 
-      <SidebarRow
-        label="Proposal Synthesis"
-        value={researchWorkTemplate.proposal_candidates.length > 0 ? `${researchWorkTemplate.proposal_candidates.length} proposal seed${researchWorkTemplate.proposal_candidates.length === 1 ? '' : 's'}` : 'Ready after summary'}
-        actionLabel="Open"
-        onAction={onOpenProposalSynthesis}
-        active={Boolean(researchWorkTemplate.synthesis_memo)}
-        current={literatureReviewStage === 'proposal'}
-      />
-
-      <SidebarRow
-        label="Draft"
-        value={agenticPlan?.plan_title || 'No generated draft yet'}
-        actionLabel="Open"
-        onAction={onOpenDraft}
-        active={Boolean(agenticPlan)}
-        current={literatureReviewStage === 'draft'}
-      />
     </aside>
   );
 }

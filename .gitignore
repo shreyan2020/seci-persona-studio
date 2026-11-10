@@ -263,3 +263,16 @@ out/
 *.bak
 *.backup
 *.old
+.document-cache/
+
+# Private runtime and research workspace
+/backend/data/
+/frontend/data/
+/data/
+/artifacts/
+/output/
+/research/
+/debug/
+*.db-*
+.env.*
+!.env.example

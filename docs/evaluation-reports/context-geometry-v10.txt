@@ -1,0 +1,95 @@
+# Agent-generated supervision: the representation test
+
+10 November 2026. Completed on the existing research server. **The revised supervision changes the representation, but does not yet teach dependable ownership of experimental results.** The original PIK3CA example fails that requirement. Keep this as a diagnosis of the representation stage; it is not a test of wave propagation.
+
+## What we generated and reviewed
+
+Two agents independently drafted development and held-source examples from previously exposed scientific abstracts. A third agent reviewed shuffled candidates against the source and reference without seeing generator labels, edit names, split names or predictions. Exact supporting quotations were checked. The review changed six relation labels and excluded two ambiguous candidates. Four unsuitable development abstracts were rejected without replacement.
+
+The accepted set has **24 papers and 166 candidate statements**: 13 training papers / 90 candidates, 3 validation papers / 21 candidates, and 8 held-source papers / 55 candidates. Each source supplies a reference and up to seven synthetic variations: paraphrases, changed numerical result, changed context, missing context, missing result, and an unsupported causal or transport claim. These edited statements are challenge inputs, not asserted scientific findings. They are separately agent-reviewed silver annotations, not human expert gold.
+
+The papers were held out from this fitting procedure, not newly discovered or unseen throughout the project. Parent-paper identity components do not overlap across splits. Related study-family independence and pretraining overlap are not established. No benchmark relevance labels were used.
+
+## What the model actually learned from
+
+We froze Qwen3-Embedding-8B and fitted a small 4096 → 64 → 32 encoder, split into two normalized 16-dimensional representations. One head concerns **retention of the reference's explicit experimental context**; the other concerns **faithfulness to the reference**. The classifier receives the ordered reference and candidate vectors, their absolute difference and product.
+
+The model inputs are reference and candidate text. IDs, edit categories, labels, reviewer rationales and context annotations are not encoder inputs. The supervision is still coarse pair labels: the model is **not explicitly trained to recover which span owns a denominator, which entity has a mutation, or which variable is a confounder**. The generated context annotations were used for authoring/review, not as a binding-reconstruction target. This is the principal limit of the pilot relative to the broader causal-geometry design.
+
+The new loss is
+
+\[
+\mathcal L = \tfrac12(\mathcal L_{\text{context CE}}+\mathcal L_{\text{faithfulness CE}})
++0.5\,\mathbb E\left[\max(0,0.15-s_C(r,p)+s_C(r,n))\right].
+\]
+
+Here `r` is a reference, `p` retains its context, `n` explicitly changes it, and `s_C` is context-vector cosine. A numerical edit can remain a context positive while being unfaithful. Unresolved context examples train the ternary classifier but do not become margin negatives. Faithfulness uses ordered-pair classification; its cosine is not interpreted as entailment. Latent dimensions have no assigned scientific names.
+
+Controls were frozen pretrained embeddings, an untrained small encoder, an alignment-only objective, classification without the extra margin, and a candidate-only probe that never sees the reference. The alignment arm is an old-style objective ablation, not an exact V9 replay. Every learned arm uses all three prespecified seeds. Selection used only the three validation papers; no seed or checkpoint was selected on the eight held-source papers.
+
+## The original PIK3CA example
+
+This previously exposed example was fixed before fitting and excluded from training, validation and the main held-source comparison. Its expected behaviors are author-specified diagnostic obligations, not independently reviewed gold labels. The reference states: 123 patients in the cohort, three PIK3CA-mutant patients, amplification in two of those three, and an EGFR mutation in the remaining mutant patient.
+
+| Synthetic candidate | Required distinction | Old-style alignment cosine | New context cosine |
+|---|---|---:|---:|
+| Amplification in 2 of the 3 mutation-positive patients | Faithful context | 0.997 | -0.093 |
+| Amplification in 1 of those 3 patients | Same context, changed result | 0.997 | -0.140 |
+| Entire-cohort amplification frequency is 2/123 | Changed denominator; unsupported extrapolation | 0.987 | 0.305 |
+| EGFR mutation in 2 of the 3 patients | Changed endpoint | 0.999 | -0.022 |
+| Mutation **caused** amplification | Unsupported causal reinterpretation | 0.999 | -0.541 |
+
+Cosines are means across the three runs, not probabilities. Coordinates from different models are not on a calibrated common scale; compare candidate ordering within each model. **All three new-geometry runs place the wrong-denominator statement closer than the faithful statement.** Classification-only also reverses that ordering in all three runs. This is not an averaging artifact or a failure exclusive to the margin term.
+
+A post-result agent audit found one limitation in the author-specified sentinel labels: the reference establishes an EGFR mutation in the remaining patient, but does not explicitly exclude EGFR mutations in the other two. Therefore the edited EGFR count is not clearly *contradicted* from this reference alone, despite that frozen diagnostic expectation. Treat its faithfulness judgment as ambiguous/not established. Its endpoint change is still explicit. The label and all original outputs remain preserved; the sentinel is not included in the main scores.
+
+The model does separate the overt causal claim, but it fails to preserve the key subgroup binding. That failure prevents calling this a usable scientific compatibility space. Full statements, all decisions and actual learned vectors are in [WORKED_EXAMPLE.md](WORKED_EXAMPLE.md) and [evaluation/worked_example.json](evaluation/worked_example.json).
+
+## What changed on the eight held-source papers
+
+The alignment control makes most statements nearly indistinguishable: average cosines by edit category are about 0.995–0.998. The supervised geometry spreads them apart, but spread alone is not the desired scientific meaning.
+
+A concrete partial success is PMID 22199341. Its target is five-year survival in the **HER2 staining-score-3** subgroup after resection of lung adenocarcinoma. Two paraphrases have new context cosines 0.835 and 0.853; changing the subgroup to **score 0**, while keeping the 20% survival value, gives 0.572. The alignment control places all three at roughly 0.996–0.999. Thus the new representation can distinguish a subgroup change in this case.
+
+The same case exposes its limit: changing only the survival result to 40% gives cosine 0.706, and the seed-11 classifier calls this a context change even though the reference's subgroup and endpoint remain intact. Omitting the disease gives cosine 0.872 and is wrongly accepted by that classifier. Geometry ordering, result faithfulness, and recognizing missing context have not become cleanly separated.
+
+Across all eight held-source papers, the extra margin does not outperform ordinary classification on geometric ordering. The descriptive fraction of retained-context candidates closer than incompatible ones is 0.870 for both. The classification-only mean gap is 0.430; the extra-margin model's gap is 0.400. These figures summarize pair ordering within papers, not calibrated validity. Post-hoc decomposition compares each negative against all reviewed retained-context candidates from its source: the new model separates overt causal extensions more strongly (mean gap 0.487 across 8 papers) than the six reviewer-confirmed context edits (0.200 across 6 papers). Two intended context edits were correctly relabeled as value-only changes during review, so they are excluded from this negative comparison.
+
+The narrower faithful-paraphrase-versus-reviewed-context-edit contrast orders correctly on 5/6, 5/6 and 4/6 eligible papers across the three geometry runs; pretrained gets 5/6, and classification-only gets 5/6 in each run. This is distinct from the all-positive/all-negative aggregate above. The ordered pair classifier also reads information beyond cosine, so its decisions cannot be explained by cosine alone. Missing context has no dedicated geometric constraint in this objective, which leaves the meaning of an unresolved region unspecified.
+
+On the eight missing-context examples, the new model makes 8 correct unresolved decisions across 24 candidate-seed predictions; these are eight distinct examples repeated across three runs, not 24 independent cases. Numeric edits preserve context correctly in 10/24 candidate-seed predictions. These are concrete targets for repair, not evidence that unknowns are already handled reliably.
+
+All held-source examples are shown in source-selection order in [REPRESENTATIONS.md](REPRESENTATIONS.md), including failures. Raw vectors and decisions are retained. The additional edit-group analysis is explicitly post-hoc, computed from frozen predictions, and used for diagnosis only.
+
+## Controls and attribution
+
+| Representation / probe | Context paper-mean accuracy | Faithfulness paper-mean accuracy | Context pair ordering |
+|---|---:|---:|---:|
+| Frozen pretrained | 0.634 | 0.673 | 0.844 |
+| Candidate only, no reference | 0.580 | 0.673 | Not defined |
+| Random small encoder | 0.363 | 0.397 | 0.708 |
+| Alignment only | 0.390 | 0.348 | 0.656 |
+| Classification only | 0.491 | 0.595 | 0.870 |
+| Classification + context margin | 0.502 | 0.589 | 0.870 |
+
+Learned-arm rows average the three fixed seeds. Paper is the comparison unit. The strong frozen pretrained probe has higher-dimensional inputs and is not parameter-matched. The candidate-only control matches pretrained faithfulness accuracy at 37/55 and performs better on balanced accuracy. This exposes a serious alternative explanation: generator wording and generic plausibility cues can support apparently good decisions without checking the source. It does not identify exactly which cue caused every decision.
+
+Primary context paper-accuracy differences: new minus alignment +0.112, paired-paper bootstrap 95% interval [-0.037, +0.298]; new minus pretrained -0.132 [-0.351, +0.028]. New minus classification is +0.011 [-0.031, +0.048]. Eight papers give limited precision; these intervals are descriptive and not corrected for multiple comparisons. The main scientific conclusion is the observed semantic failure, not a declaration that the whole proposed approach cannot work.
+
+Training losses keep falling while validation losses worsen: all classification-only checkpoints select step 30, and new geometry selects steps 30, 30 and 60 out of 240. This is consistent with overfitting the small supervision set. More updates on these same examples are not supported by the validation evidence.
+
+## Research decision
+
+**Retain** separate context and faithfulness targets, exact source support, blinded review, whole-paper splits, the candidate-only control, and inspection of actual vectors. **Do not advance** this representation into another wave benchmark yet.
+
+The next discriminating development test should teach explicit ownership and evaluate it directly. For this paper, represent amplification with owner = PIK3CA-mutant subgroup, denominator = 3, parent cohort = 123, endpoint = PIK3CA amplification. Add supervised span/role binding and targeted loss terms for changing the owner or endpoint while preserving context under result-only edits. This is a proposed next objective, not implemented here. Causal roles and identification need a separate reviewed target; these abstract pairs do not establish either.
+
+Use counterbalanced contrast sets: keep a candidate unchanged while changing which reference supports it; vary causal vocabulary in supported and unsupported examples; mix numeric and ownership edits across labels. Those stress tests make source use necessary and reduce edit-template shortcuts. Independently review the evidence bindings before training. Treat the now-inspected eight-paper set as development evidence for future work; reserve new paper/study families for the next fixed evaluation. Do not tune repeatedly on this test set.
+
+## Execution and integrity
+
+The existing A10 produced 223 unique text embeddings in 8.51 seconds (no truncation; reported peak CUDA allocation 15,300,406,272 bytes). Fitting/probing all 14 runs took 12.19 seconds. The restarted parent process ran for 32.14 seconds before the verification exception described below. These durations overlap; they are not additive GPU-allocation hours. Agent drafting/review token and wall-time costs were not separately metered.
+
+Two execution failures are retained. The first launch failed before embedding because a local `inspect.py` shadowed Python's standard module; it was renamed before fitting and the original deadline was retained. The second launch completed fitting and evaluation, but a probability-sum check used an overly strict 1e-8 tolerance for float32 values. The observed maximum error was 1.1920928955078125e-7. A separate verifier with tolerance 1e-6 passed 1,540 prediction checks, frozen hashes, source separation, normalization and decision consistency. No model was refitted and no score was changed. The original failed parent receipt remains unchanged; [completion_receipt.json](completion_receipt.json) records the successful analysis continuation.
+
+Five mechanism tests and a constructed end-to-end smoke run passed. They test the implementation and held-label boundary, not scientific semantics. See the three amendment files, [experiment_record.json](experiment_record.json), [freeze.json](freeze.json), and [evaluation/posthoc_diagnosis.json](evaluation/posthoc_diagnosis.json). Training and scoring code, all checkpoints, embeddings, reviewer judgments and raw outputs are retained locally and on the server.

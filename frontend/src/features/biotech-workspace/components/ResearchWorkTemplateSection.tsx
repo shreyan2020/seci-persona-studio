@@ -1,13 +1,16 @@
-import { useEffect, useState } from 'react';
+import { API_BASE } from '../lib/api-base';
+import { useSearchParams } from 'next/navigation';
+import { paperHeading, paperLink } from '../lib/paper-display';
+import { literatureMatches } from '../lib/literature-matches';
+import { useEffect, useState, useRef } from 'react';
 import type {
   JudgmentCall,
-  ProposalCandidate,
   ResearchFinding,
   ResearchGap,
   ResearchWorkTemplate,
   ValidationTrack,
 } from '@/features/biotech-workspace/types';
-import { classNames } from '@/features/biotech-workspace/lib/utils';
+import { classNames, normalizeResearchWorkTemplate } from '@/features/biotech-workspace/lib/utils';
 
 interface ResearchWorkTemplateSectionProps {
   workTemplate: ResearchWorkTemplate;
@@ -26,11 +29,9 @@ interface ResearchWorkTemplateSectionProps {
   preparingPdfFindingId?: string | null;
   buildingPaperOntologyId?: string | null;
   pdfAnnotationStatus?: string | null;
-  reviewStage: 'review' | 'summary' | 'proposal' | 'draft';
+  pdfAnnotationFindingId?: string | null;
+  reviewStage: 'review' | 'summary';
   onCompleteReview: (summary: string) => void;
-  onMoveToProposalSynthesis: () => void;
-  onGeneratePlan: () => void;
-  loadingPlan: boolean;
 }
 
 function makeId(prefix: string) {
@@ -277,7 +278,7 @@ function buildLiteratureReviewSummary(
 }
 
 export function ResearchWorkTemplateSection({
-  workTemplate,
+  workTemplate: savedWorkTemplate,
   onWorkTemplateChange,
   onFetchLiterature,
   fetchingLiterature,
@@ -293,13 +294,33 @@ export function ResearchWorkTemplateSection({
   preparingPdfFindingId,
   buildingPaperOntologyId,
   pdfAnnotationStatus,
+  pdfAnnotationFindingId,
   reviewStage,
   onCompleteReview,
-  onGeneratePlan,
-  loadingPlan,
 }: ResearchWorkTemplateSectionProps) {
+  const workTemplate = normalizeResearchWorkTemplate(savedWorkTemplate);
+  const projectId = useSearchParams().get('projectId');
+  const currentUploadContext = useRef({projectId, workTemplate, onWorkTemplateChange});
+  currentUploadContext.current = {projectId, workTemplate, onWorkTemplateChange};
+  const [editingSourceId, setEditingSourceId] = useState('');
+  const [uploadStatus, setUploadStatus] = useState('');
+  const [uploading, setUploading] = useState(false);
+  async function attachPdf(finding: ResearchFinding, file?: File) {
+    if (!file || !projectId || uploading) return;
+    setUploading(true); setUploadStatus('Uploading PDF…');
+    try {
+      const body = new FormData(); body.append('file', file);
+      const response = await fetch(`${API_BASE}/api/projects/${projectId}/literature/upload`, { method: 'POST', body });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.detail || 'Upload failed');
+      const current = currentUploadContext.current;
+      if (current.projectId !== projectId) return;
+      current.onWorkTemplateChange({...current.workTemplate, literature_findings:current.workTemplate.literature_findings.map(item=>item.id===finding.id ? {...item, source_ids:{...item.source_ids, uploaded_id:result.paper_id}, annotations:[], pdf_reader:undefined} : item)});
+      setUploadStatus('PDF attached. Select Review paper to prepare highlights.');
+    } catch (error) { setUploadStatus(error instanceof Error ? error.message : 'Upload failed'); }
+    finally { setUploading(false); }
+  }
   const [activeFindingIndex, setActiveFindingIndex] = useState(0);
-  const [proposalSynthesisNotice, setProposalSynthesisNotice] = useState('');
   const findingCount = workTemplate.literature_findings.length;
   const activeFinding = findingCount > 0 ? workTemplate.literature_findings[Math.min(activeFindingIndex, findingCount - 1)] : null;
   const activeJudgments = activeFinding?.judgment_calls || [];
@@ -429,38 +450,6 @@ export function ResearchWorkTemplateSection({
     });
   };
 
-  const addProposalCandidate = () => {
-    const nextItem: ProposalCandidate = {
-      id: makeId('proposal'),
-      title: '',
-      why_now: '',
-      experiment_outline: '',
-      readouts: [],
-      source_refs: [],
-      gap_refs: [],
-      judgment_refs: [],
-      validation_refs: [],
-    };
-    onWorkTemplateChange({
-      ...workTemplate,
-      proposal_candidates: [...workTemplate.proposal_candidates, nextItem],
-    });
-  };
-
-  const updateProposalCandidate = (id: string, patch: Partial<ProposalCandidate>) => {
-    onWorkTemplateChange({
-      ...workTemplate,
-      proposal_candidates: workTemplate.proposal_candidates.map((item) => (item.id === id ? { ...item, ...patch } : item)),
-    });
-  };
-
-  const removeProposalCandidate = (id: string) => {
-    onWorkTemplateChange({
-      ...workTemplate,
-      proposal_candidates: workTemplate.proposal_candidates.filter((item) => item.id !== id),
-    });
-  };
-
   const addGap = () => {
     const nextGap: ResearchGap = {
       id: makeId('gap'),
@@ -510,13 +499,13 @@ export function ResearchWorkTemplateSection({
         <>
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">Research Work Template</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">Literature search</div>
             </div>
           </div>
 
           <div className="mt-4 rounded-[1.4rem] border border-slate-200 bg-slate-50 p-4">
             <div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">Initial Query</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">Search question</div>
             </div>
             <textarea
               value={workTemplate.initial_query}
@@ -531,11 +520,7 @@ export function ResearchWorkTemplateSection({
               </button>
             </div>
 
-            {pdfAnnotationStatus && (
-              <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-950">
-                {pdfAnnotationStatus}
-              </div>
-            )}
+
           </div>
         </>
       )}
@@ -773,23 +758,6 @@ export function ResearchWorkTemplateSection({
             </div>
             </div>
           </div>
-          <div className="mt-5 border-t border-sky-100 pt-4">
-            {proposalSynthesisNotice && (
-              <div className="mb-3 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm leading-6 text-sky-950">
-                {proposalSynthesisNotice}
-              </div>
-            )}
-            <div className="flex justify-end">
-              <button
-                onClick={() => {
-                  setProposalSynthesisNotice('Proposal synthesis is work in progress and not available in this trial build yet.');
-                }}
-                className={cardButtonClass('primary')}
-              >
-                Move to proposal synthesis
-              </button>
-            </div>
-          </div>
         </section>
       ) : reviewStage === 'review' ? (
       <>
@@ -830,26 +798,17 @@ export function ResearchWorkTemplateSection({
                   </button>
                 </div>
 
-                <div key={`${activeFinding.id}-${activeFinding.citation || activeFindingIndex}`} className="rounded-[1.4rem] border border-slate-200 bg-white p-5">
+                <div key={activeFinding.id} className="rounded-[1.4rem] border border-slate-200 bg-white p-5">
                   <div className="flex items-center justify-between gap-3">
                     <div className="text-sm font-semibold text-slate-950">Finding {activeFindingIndex + 1}</div>
                     <div className="flex flex-wrap justify-end gap-2">
                       {onPreparePaperPdf && (
                         <button
                           onClick={() => onPreparePaperPdf(activeFinding)}
-                          disabled={preparingPdfFindingId === activeFinding.id}
+                          disabled={Boolean(preparingPdfFindingId)}
                           className={classNames(cardButtonClass(), 'disabled:cursor-not-allowed disabled:opacity-50')}
                         >
-                          {preparingPdfFindingId === activeFinding.id ? 'Generating annotations...' : 'Review paper'}
-                        </button>
-                      )}
-                      {onBuildPaperOntology && (
-                        <button
-                          onClick={() => onBuildPaperOntology(activeFinding)}
-                          disabled={buildingPaperOntologyId === activeFinding.id}
-                          className={classNames(cardButtonClass('primary'), 'disabled:cursor-not-allowed disabled:opacity-50')}
-                        >
-                          {buildingPaperOntologyId === activeFinding.id ? 'Building ontology...' : 'Build ontology'}
+                          {preparingPdfFindingId === activeFinding.id ? 'Opening paper…' : 'Review paper'}
                         </button>
                       )}
                       <button onClick={() => removeLiteratureFinding(activeFinding.id)} className={cardButtonClass()}>
@@ -858,88 +817,38 @@ export function ResearchWorkTemplateSection({
                     </div>
                   </div>
 
+                  {pdfAnnotationStatus && pdfAnnotationFindingId === activeFinding.id && (
+                    <div role="status" aria-live="polite" className="mt-3 flex items-start gap-3 rounded-xl border border-cyan-200 bg-cyan-50 px-4 py-3 text-sm text-cyan-950">
+                      {preparingPdfFindingId === activeFinding.id && <span aria-hidden="true" className="mt-1 h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-cyan-200 border-t-cyan-700" />}
+                      <span>{pdfAnnotationStatus}</span>
+                    </div>
+                  )}
+
                   <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
                     <div className="line-clamp-2 text-sm font-semibold leading-6 text-slate-950">
-                      {activeFinding.citation || 'Untitled literature source'}
+                      {paperHeading(activeFinding)}
                     </div>
                     <div className="mt-2 line-clamp-4 text-sm leading-6 text-slate-700">
                       {activeFinding.relevance ||
                         activeFinding.knowns[0] ||
                         'No summary captured yet.'}
                     </div>
-                    {activeFinding.labels.length > 0 && (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {activeFinding.labels.slice(0, 6).map((label) => (
-                          <span key={`${activeFinding.id}-${label}`} className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-700">
-                            {label}
-                          </span>
-                        ))}
-                      </div>
+                    {literatureMatches(activeFinding.labels).length > 0 && (
+                      <p className="mt-3 text-xs leading-5 text-slate-500">
+                        <span className="font-medium">Matches: </span>{literatureMatches(activeFinding.labels).join(' · ')}
+                      </p>
                     )}
                   </div>
 
-                  <details className="mt-3 rounded-2xl border border-slate-200 bg-white p-3">
-                    <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-slate-600">
-                      Edit extracted fields
-                    </summary>
-
-                  <label className="mt-3 block">
-                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">Citation Or Source</div>
-                    <input
-                      value={activeFinding.citation}
-                      onChange={(e) => updateLiteratureFinding(activeFinding.id, { citation: e.target.value })}
-                      className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
-                      placeholder="Citation or source"
-                    />
-                  </label>
-
-                  <label className="mt-3 block">
-                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">Labels Or Question Types</div>
-                    <input
-                      value={activeFinding.labels.join(', ')}
-                      onChange={(e) => updateLiteratureFinding(activeFinding.id, { labels: splitLines(e.target.value.replace(/,\s*/g, '\n')) })}
-                      className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
-                      placeholder="enzyme engineering, process optimization, transfer question"
-                    />
-                  </label>
-
-                  {activeFinding.source_ids && Object.values(activeFinding.source_ids).some(Boolean) && (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {Object.entries(activeFinding.source_ids)
-                        .filter(([, value]) => Boolean(value))
-                        .map(([key, value]) => (
-                          <span key={`${activeFinding.id}-${key}`} className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[11px] font-semibold text-sky-900">
-                            {key.toUpperCase()}: {value}
-                          </span>
-                        ))}
-                    </div>
-                  )}
-
-                  <div className="mt-3 grid gap-3">
-                    <Field
-                      label="Knowns"
-                      value={joinLines(activeFinding.knowns)}
-                      onChange={(value) => updateLiteratureFinding(activeFinding.id, { knowns: splitLines(value) })}
-                      placeholder="One known per line"
-                      rows={4}
-                    />
-                    <Field
-                      label="Unknowns Or Follow-up Questions"
-                      value={joinLines(activeFinding.unknowns)}
-                      onChange={(value) => updateLiteratureFinding(activeFinding.id, { unknowns: splitLines(value) })}
-                      placeholder="One gap or question per line"
-                      rows={4}
-                    />
+                  {paperLink(activeFinding) && <a href={paperLink(activeFinding)} target="_blank" rel="noreferrer" className="mt-3 inline-block text-sm text-cyan-800 underline">Open publisher page</a>}
+                  {projectId && <label className="ml-4 inline-block cursor-pointer text-sm text-cyan-800 underline">{uploading ? 'Uploading…' : 'Attach PDF'}<input type="file" accept="application/pdf,.pdf" disabled={uploading} className="sr-only" onChange={event=>{void attachPdf(activeFinding,event.target.files?.[0]);event.target.value='';}} /></label>}
+                  {uploadStatus && <p role="status" className="mt-2 text-sm text-slate-600">{uploadStatus}</p>}
+                  {(!activeFinding.citation || editingSourceId === activeFinding.id) && <div><Field placeholder="Paper title or source link" label="Paper title or source link" value={activeFinding.citation} onChange={value=>{setEditingSourceId(activeFinding.id);updateLiteratureFinding(activeFinding.id,{citation:value});}} /><button className="mt-2 text-sm underline" disabled={!activeFinding.citation.trim()} onClick={()=>setEditingSourceId('')}>Done</button></div>}
+                  <div className="mt-4 rounded-2xl border border-slate-200 p-4">
+                    <h3 className="text-sm font-semibold">Paper summary</h3>
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-slate-700">{activeFinding.knowns.join('\n\n') || 'No paper summary available yet.'}</p>
                   </div>
-
-                  <Field
-                    label="How this finding informs the project"
-                    value={activeFinding.relevance}
-                    onChange={(value) => updateLiteratureFinding(activeFinding.id, { relevance: value })}
-                    placeholder="Explain why this source matters, what transfers, and where you remain uncertain."
-                  />
-                  </details>
-
+                  {(activeJudgments.length > 0 || (activeFinding.validation_tracks || []).length > 0) && <details className="mt-4"><summary className="cursor-pointer text-sm text-slate-600">Saved review notes</summary>
                   <div className="mt-5 grid gap-4 xl:grid-cols-2">
                     <section className="rounded-[1.25rem] border border-slate-200 bg-slate-50 p-4">
                       <div className="flex items-start justify-between gap-3">
@@ -1090,14 +999,15 @@ export function ResearchWorkTemplateSection({
                     </section>
                   </div>
 
+                  </details>}
                   <section className="mt-4 rounded-[1.25rem] border border-slate-200 bg-slate-50 p-4">
-                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">Finding Memo</div>
+                    <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">Reading notes</div>
                     <textarea
                       value={activeFinding.synthesis_memo || ''}
                       onChange={(e) => updateLiteratureFinding(activeFinding.id, { synthesis_memo: e.target.value })}
                       rows={5}
                       className="mt-3 w-full rounded-[1.25rem] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900"
-                      placeholder="Paper memo"
+                      placeholder="An observation, exception, or relevant experience…"
                     />
                   </section>
                 </div>
@@ -1109,7 +1019,7 @@ export function ResearchWorkTemplateSection({
 
       {reviewStage === 'review' && workTemplate.literature_findings.length > 0 && (
         <section className="mt-4 rounded-[1.4rem] border border-dashed border-slate-300 bg-white/80 p-5 text-center">
-          <div className="text-sm font-semibold text-slate-950">Ready to move from literature review to proposal synthesis?</div>
+          <div className="text-sm font-semibold text-slate-950">Ready to compile the reviewed literature?</div>
           <button
             onClick={() =>
               onCompleteReview(buildLiteratureReviewSummary(workTemplate, literatureObjectiveLens, literatureProcessingSummary))
@@ -1123,112 +1033,6 @@ export function ResearchWorkTemplateSection({
       </>
       ) : null}
 
-      {reviewStage === 'proposal' && (
-      <section className="mt-4 rounded-[1.4rem] border border-slate-200 bg-slate-50 p-4">
-        <SectionHeader
-          eyebrow="Proposal Seeds"
-          title="Candidate research proposals"
-          actionLabel="Add proposal"
-          onAction={addProposalCandidate}
-        />
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button onClick={onGeneratePlan} disabled={loadingPlan} className={classNames(cardButtonClass('primary'), 'disabled:cursor-not-allowed disabled:opacity-50')}>
-            {loadingPlan ? 'Generating...' : 'Generate draft from insights'}
-          </button>
-        </div>
-        <div className="mt-4 space-y-3">
-          {workTemplate.proposal_candidates.length === 0 ? (
-            <EmptyState
-              title="No proposal candidates yet"
-              actionLabel="Add first proposal"
-              onAction={addProposalCandidate}
-            />
-          ) : (
-            workTemplate.proposal_candidates.map((proposal, index) => (
-              <div key={proposal.id} className="rounded-[1.25rem] border border-slate-200 bg-white p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm font-semibold text-slate-950">Proposal {index + 1}</div>
-                  <button onClick={() => removeProposalCandidate(proposal.id)} className={cardButtonClass()}>
-                    Remove
-                  </button>
-                </div>
-
-                <label className="mt-3 block">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-slate-600">Proposal title</div>
-                  <input
-                    value={proposal.title}
-                    onChange={(e) => updateProposalCandidate(proposal.id, { title: e.target.value })}
-                    className="mt-1 w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900"
-                    placeholder="Proposal title"
-                  />
-                </label>
-
-                <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                  <Field
-                    label="Why now"
-                    value={proposal.why_now}
-                    onChange={(value) => updateProposalCandidate(proposal.id, { why_now: value })}
-                    placeholder="Why is this proposal timely or decision-useful?"
-                    rows={4}
-                  />
-                  <Field
-                    label="Experiment outline"
-                    value={proposal.experiment_outline}
-                    onChange={(value) => updateProposalCandidate(proposal.id, { experiment_outline: value })}
-                    placeholder="Describe the experiment shape, conditions, or comparison to run."
-                    rows={4}
-                  />
-                </div>
-
-                <Field
-                  label="Readouts and measurements"
-                  value={joinLines(proposal.readouts)}
-                  onChange={(value) => updateProposalCandidate(proposal.id, { readouts: splitLines(value) })}
-                  placeholder="One readout or measurement objective per line"
-                  rows={4}
-                />
-
-                <details className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                  <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-slate-600">
-                    Evidence trace
-                  </summary>
-                  <div className="mt-3 grid gap-3 md:grid-cols-2">
-                    <Field
-                      label="Source refs"
-                      value={joinLines(proposal.source_refs || [])}
-                      onChange={(value) => updateProposalCandidate(proposal.id, { source_refs: splitLines(value) })}
-                      placeholder="S1, S2, citation, PMID..."
-                      rows={3}
-                    />
-                    <Field
-                      label="Gap refs"
-                      value={joinLines(proposal.gap_refs || [])}
-                      onChange={(value) => updateProposalCandidate(proposal.id, { gap_refs: splitLines(value) })}
-                      placeholder="Gap themes or IDs"
-                      rows={3}
-                    />
-                    <Field
-                      label="Judgment refs"
-                      value={joinLines(proposal.judgment_refs || [])}
-                      onChange={(value) => updateProposalCandidate(proposal.id, { judgment_refs: splitLines(value) })}
-                      placeholder="User stances or boundary conditions"
-                      rows={3}
-                    />
-                    <Field
-                      label="Validation refs"
-                      value={joinLines(proposal.validation_refs || [])}
-                      onChange={(value) => updateProposalCandidate(proposal.id, { validation_refs: splitLines(value) })}
-                      placeholder="UniProt lookup, assay data, modeling path..."
-                      rows={3}
-                    />
-                  </div>
-                </details>
-              </div>
-            ))
-          )}
-        </div>
-      </section>
-      )}
     </div>
   );
 }

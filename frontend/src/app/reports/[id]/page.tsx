@@ -29,8 +29,8 @@ interface PersonaItem {
   last_summary: string;
 }
 
-async function fetchReport(id: string): Promise<ReportMeta> {
-  const res = await fetch(`${API_BASE}/api/reports/${id}`, { cache: 'no-store' });
+async function fetchReport(id: string, signal?: AbortSignal): Promise<ReportMeta> {
+  const res = await fetch(`${API_BASE}/api/reports/${id}`, { cache: 'no-store', signal });
   if (!res.ok) throw new Error('Failed to load report');
   return res.json();
 }
@@ -87,16 +87,23 @@ export default function ReportEditorPage({ params }: { params: { id: string } })
 
   useEffect(() => {
     if (!meta || !['queued', 'running'].includes(meta.status)) return;
+    let cancelled = false;
+    let pending = false;
+    const controller = new AbortController();
     const timer = setInterval(async () => {
+      if (pending) return;
+      pending = true;
       try {
-        const next = await fetchReport(reportId);
-        setMeta(next);
+        const next = await fetchReport(reportId, controller.signal);
+        if (!cancelled) setMeta(next);
       } catch {
         // no-op
+      } finally {
+        pending = false;
       }
     }, 2500);
-    return () => clearInterval(timer);
-  }, [meta?.status, reportId, meta]);
+    return () => { cancelled = true; controller.abort(); clearInterval(timer); };
+  }, [meta?.status, reportId]);
 
   const saveQmd = async () => {
     setSaving(true);

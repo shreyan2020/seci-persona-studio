@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { LoadingSpinner } from '@/features/biotech-workspace/components/LoadingSpinner';
 import type { Project, ProjectFormState } from '@/features/biotech-workspace/types';
 import { classNames } from '@/features/biotech-workspace/lib/utils';
@@ -32,6 +33,12 @@ export function ProjectLandingShell({
   return (
     <div className="grid gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
       <aside className="space-y-5">
+        <section className="border border-cyan-200 bg-cyan-50 p-5">
+          <h2 className="text-lg font-semibold text-slate-950">Explore a research example</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-700">Compare itaconic-acid experiments and follow three specialist perspectives on the evidence.</p>
+          <Link href="/examples/itaconate" className="mt-4 inline-block rounded-xl bg-cyan-900 px-4 py-3 text-sm font-semibold text-white">Open example project</Link>
+          <p className="mt-2 text-xs text-slate-600">Ready to browse. No setup or model server needed.</p>
+        </section>
         <section className="rounded-none border border-slate-200 bg-white/90 p-5 shadow-sm backdrop-blur">
           <div className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">Create Project</div>
           <div className="mt-4 space-y-3">
@@ -103,7 +110,7 @@ export function ProjectLandingShell({
               disabled={creatingProject}
               className="w-full rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {creatingProject ? 'Provisioning...' : 'Create Project and Collaborators'}
+              {creatingProject ? 'Creating project...' : 'Create project'}
             </button>
           </div>
         </section>
@@ -146,9 +153,7 @@ export function ProjectLandingShell({
                         <div className="mt-1 text-xs text-slate-600">{project.end_product}</div>
                       </button>
                       <div className="flex shrink-0 flex-col items-end gap-2">
-                        <span className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] text-slate-700">
-                          {project.personas.length} collaborators
-                        </span>
+
                         <button
                           onClick={() => onDeleteProject(project)}
                           disabled={deletingProjectId === project.id}
@@ -174,8 +179,7 @@ export function ProjectLandingShell({
               Start from an existing biotech project or spin up a new one
             </h2>
             <p className="mt-3 text-sm leading-6 text-slate-600 md:text-base">
-              After you enter a project, the main screen focuses on that single program: project collaborators, objective clustering,
-              working-question refinement, a structured research work template, and the saved draft workspace.
+              Define your question, inspect the evidence, and compare research options in a saved workspace.
             </p>
           </div>
           <div className="mt-6 grid gap-3 md:grid-cols-3">
@@ -195,8 +199,7 @@ export function ProjectLandingShell({
             <div className="rounded-2xl border border-sky-200 bg-sky-50 p-4">
               <div className="text-[11px] font-semibold uppercase tracking-wide text-sky-800">3. Collaborate And Save</div>
               <div className="mt-2 text-sm text-sky-950">
-                Work with the recommended agent, capture literature-to-proposal reasoning, and reopen the saved project later without
-                losing progress.
+                Compare evidence and agent perspectives in the research board, then review the decisions that need your input.
               </div>
             </div>
           </div>

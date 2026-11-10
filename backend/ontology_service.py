@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import re
@@ -30,6 +31,7 @@ STOPWORDS = {
     "between",
     "both",
     "can",
+    "claim",
     "data",
     "does",
     "during",
@@ -132,12 +134,20 @@ ALLOWED_EXTRACTED_RELATIONS = {
 }
 
 KNOWN_BIOTECH_CHEMICALS = {
+    "acetyl-coa",
+    "caffeic acid",
+    "cinnamic acid",
+    "coumaric acid",
     "resveratrol",
     "naringenin",
     "p-coumaric acid",
     "p-coumaric",
     "coumaroyl-coa",
     "malonyl-coa",
+    "p-ca",
+    "phenylalanine",
+    "sucrose",
+    "tyrosine",
     "glucose",
     "flavonoid",
     "flavonoids",
@@ -169,13 +179,67 @@ KNOWN_PROCESS_CONDITIONS = {
     "shake flask",
     "bioreactor",
     "fermentation",
-    "glucose",
     "oxygen",
     "media",
     "medium",
     "feed",
     "substrate",
 }
+
+NON_PRODUCT_CHEMICALS = {
+    "acetyl-coa",
+    "coumaroyl-coa",
+    "flavonoid",
+    "flavonoids",
+    "glucose",
+    "malonyl-coa",
+    "phenylalanine",
+    "sucrose",
+    "tyrosine",
+}
+
+WEAK_CONCEPT_BIGRAM_TOKENS = {"produced", "reached", "reports", "reported", "supports"}
+
+KNOWN_GENE_SYMBOLS = {
+    "4CL",
+    "ACC1",
+    "ARO4",
+    "ARO7",
+    "CHI",
+    "CHS",
+    "FLS",
+    "STS",
+    "TAL",
+    "TKL1",
+    "ZWF1",
+}
+
+KNOWN_ENZYME_NAMES = {
+    "4-coumarate coa ligase",
+    "acetyl-coa carboxylase",
+    "chalcone isomerase",
+    "chalcone synthase",
+    "flavonol synthase",
+    "phenylalanine ammonia lyase",
+    "stilbene synthase",
+    "tyrosine ammonia lyase",
+}
+
+QUERY_TERM_BLOCKLIST = {
+    "annotated",
+    "annotation",
+    "crossref",
+    "literature",
+    "openalex",
+    "pdf",
+    "pdf annotated",
+    "pmcid",
+    "pmid",
+    "pubmed",
+    "short label",
+}
+
+ONTOLOGY_GENERATION_VERSION = "ontology-v3-precision-grounded"
 
 
 def _slug(value: str, prefix: str = "node") -> str:
@@ -188,6 +252,19 @@ def _compact(value: Optional[str], limit: int = 220) -> str:
     if len(text) <= limit:
         return text
     return text[: limit - 3].rstrip() + "..."
+
+
+def _stable_hash(payload: Any) -> str:
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
+
+
+def _stable_node_list(nodes: Iterable[OntologyNode]) -> List[OntologyNode]:
+    return sorted(nodes, key=lambda node: (node.type, node.label.lower(), node.id))
+
+
+def _stable_edge_list(edges: Iterable[OntologyEdge]) -> List[OntologyEdge]:
+    return sorted(edges, key=lambda edge: (edge.relation, edge.source, edge.target, edge.id))
 
 
 def _source_ref_from_ids(source_ids: Dict[str, Any]) -> List[str]:
@@ -205,15 +282,20 @@ def _tokens(text: str) -> List[str]:
 
 def _candidate_terms(texts: Iterable[str], limit: int = 18) -> List[str]:
     counts: Counter[str] = Counter()
+    chemical_terms = {term.lower() for term in KNOWN_BIOTECH_CHEMICALS}
     for text in texts:
-        toks = [token for token in _tokens(text) if token not in STOPWORDS]
+        toks = [token for token in _tokens(text) if token not in STOPWORDS and token not in QUERY_TERM_BLOCKLIST]
         for token in toks:
-            if token in BIOTECH_TERMS or len(token) >= 5:
+            if token in chemical_terms:
                 counts[token] += 1
         for left, right in zip(toks, toks[1:]):
-            if left not in STOPWORDS and right not in STOPWORDS and (left in BIOTECH_TERMS or right in BIOTECH_TERMS):
+            if left in QUERY_TERM_BLOCKLIST or right in QUERY_TERM_BLOCKLIST:
+                continue
+            if left in WEAK_CONCEPT_BIGRAM_TOKENS or right in WEAK_CONCEPT_BIGRAM_TOKENS:
+                continue
+            if left in BIOTECH_TERMS or right in BIOTECH_TERMS or f"{left} {right}" in chemical_terms:
                 counts[f"{left} {right}"] += 2
-    return [term for term, _ in counts.most_common(limit)]
+    return [term for term, _ in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit]]
 
 
 def _normalize_entity_type(value: Any) -> str:
@@ -236,7 +318,7 @@ def _finding_text_bundle(finding: Any) -> str:
         value = getattr(finding, attr, "")
         if value:
             parts.append(str(value))
-    for attr in ["labels", "knowns", "unknowns", "annotation_insights", "generated_questions"]:
+    for attr in ["knowns", "unknowns", "annotation_insights", "generated_questions"]:
         parts.extend(str(item) for item in (getattr(finding, attr, None) or []) if str(item).strip())
     for judgment in getattr(finding, "judgment_calls", []) or []:
         if isinstance(judgment, dict):
@@ -250,7 +332,7 @@ def _finding_text_bundle(finding: Any) -> str:
 
 def _measurement_mentions(text: str) -> List[str]:
     pattern = re.compile(
-        r"\b\d+(?:\.\d+)?\s*(?:g/L|mg/L|ug/L|microg/L|mM|uM|fold|%|h|hours|days)\b",
+        r"\b\d+(?:\.\d+)?\s*(?:g/L|mg/L|ug/L|microg/L|mM|uM|μM|µM|fold|%|h|hours|days)\b",
         re.IGNORECASE,
     )
     return sorted(set(match.group(0) for match in pattern.finditer(text)), key=lambda item: text.lower().find(item.lower()))[:12]
@@ -267,14 +349,12 @@ def _species_mentions(text: str) -> List[str]:
     ]
     lower = text.lower()
     found = [item for item in candidates if item.lower() in lower]
-    found.extend(match.group(0) for match in re.finditer(r"\b[A-Z][a-z]+ [a-z]{3,}\b", text))
     return sorted(set(found), key=lambda item: lower.find(item.lower()) if item.lower() in lower else 999999)[:10]
 
 
 def _chemical_mentions(text: str) -> List[str]:
     lower = text.lower()
     found = [item for item in KNOWN_BIOTECH_CHEMICALS if item in lower]
-    found.extend(match.group(0) for match in re.finditer(r"\b[A-Za-z]?[A-Za-z0-9]+(?:-[A-Za-z0-9]+)+(?:\s+acid)?\b", text))
     return sorted(set(found), key=lambda item: lower.find(item.lower()) if item.lower() in lower else 999999)[:14]
 
 
@@ -291,15 +371,14 @@ def _process_condition_mentions(text: str) -> List[str]:
 
 
 def _gene_or_enzyme_mentions(text: str) -> List[str]:
-    found: List[str] = []
-    for match in re.finditer(r"\b[A-Z][A-Za-z0-9]{1,5}\b", text):
-        token = match.group(0)
-        if token.upper() in {"DNA", "RNA", "HPLC", "LC", "MS", "GC", "PMC", "PMID", "DOI"}:
-            continue
-        found.append(token)
-    enzyme_phrases = re.findall(r"\b[A-Za-z0-9-]+(?:ase|synthase|reductase|transferase)\b", text, flags=re.IGNORECASE)
-    found.extend(enzyme_phrases)
-    return sorted(set(found), key=lambda item: text.find(item))[:12]
+    lower = text.lower()
+    found = [name for name in KNOWN_ENZYME_NAMES if name in lower]
+    found.extend(
+        symbol
+        for symbol in KNOWN_GENE_SYMBOLS
+        if re.search(rf"(?<![A-Za-z0-9]){re.escape(symbol)}(?![A-Za-z0-9])", text, flags=re.IGNORECASE)
+    )
+    return sorted(set(found), key=lambda item: lower.find(item.lower()))[:12]
 
 
 def fallback_paper_ontology_extraction(finding: Any) -> Dict[str, List[Dict[str, Any]]]:
@@ -333,8 +412,13 @@ def fallback_paper_ontology_extraction(finding: Any) -> Dict[str, List[Dict[str,
     enzyme_ids = [add_entity(item, "gene_or_enzyme", "Detected gene, protein, or enzyme mention.") for item in _gene_or_enzyme_mentions(text)]
 
     relation_evidence = _compact(text, 260)
+    product_chemical_ids = [
+        entity_id
+        for entity_id in chemical_ids
+        if entity_id and not any(entity_id.endswith(f"_{_slug(name, 'chemical').removeprefix('chemical_')}") for name in NON_PRODUCT_CHEMICALS)
+    ]
     for species_id in species_ids[:3]:
-        for chemical_id in chemical_ids[:4]:
+        for chemical_id in product_chemical_ids[:4]:
             relations.append({"source": species_id, "relation": "produces", "target": chemical_id, "evidence": [relation_evidence], "confidence": 0.62})
     for chemical_id in chemical_ids[:4]:
         for measurement_id in measurement_ids[:4]:
@@ -345,17 +429,13 @@ def fallback_paper_ontology_extraction(finding: Any) -> Dict[str, List[Dict[str,
     for condition_id in condition_ids[:4]:
         for chemical_id in chemical_ids[:4]:
             relations.append({"source": chemical_id, "relation": "has_condition", "target": condition_id, "evidence": [relation_evidence], "confidence": 0.62})
-    for enzyme_id in enzyme_ids[:5]:
-        for chemical_id in chemical_ids[:4]:
-            relations.append({"source": enzyme_id, "relation": "catalyzes", "target": chemical_id, "evidence": [relation_evidence], "confidence": 0.55})
-
     limitation_texts = [
         item
         for item in re.split(r"(?<=[.!?])\s+", text)
         if re.search(r"\b(however|limitation|limited|bottleneck|remain|uncertain|unknown|challenge|further)\b", item, re.IGNORECASE)
     ][:8]
     for index, limitation in enumerate(limitation_texts, start=1):
-        limitation_id = add_entity(f"Limitation {index}", "limitation", limitation)
+        limitation_id = add_entity(_compact(limitation, 110), "limitation", limitation)
         for chemical_id in chemical_ids[:2]:
             relations.append({"source": chemical_id, "relation": "limited_by", "target": limitation_id, "evidence": [_compact(limitation, 220)], "confidence": 0.68})
 
@@ -465,19 +545,35 @@ class OntologyBuilder:
     ) -> str:
         if not label:
             return node_id
+        clean_description = _compact(description)
+        clean_refs = sorted(set(source_refs or []))
+        generation_attributes = {
+            "generation_version": ONTOLOGY_GENERATION_VERSION,
+            "generation_method": (attributes or {}).get("generation_method") or "deterministic_rules",
+            "input_fingerprint": _stable_hash(
+                {
+                    "id": node_id,
+                    "type": node_type,
+                    "label": label,
+                    "description": clean_description,
+                    "source_refs": clean_refs,
+                }
+            ),
+        }
         existing = self.nodes.get(node_id)
         if existing:
-            refs = sorted(set(existing.source_refs + (source_refs or [])))
-            attrs = {**existing.attributes, **(attributes or {})}
+            refs = sorted(set(existing.source_refs + clean_refs))
+            attrs = {**generation_attributes, **existing.attributes, **(attributes or {})}
             self.nodes[node_id] = existing.model_copy(update={"source_refs": refs, "attributes": attrs})
             return node_id
+        attrs = {**generation_attributes, **(attributes or {})}
         self.nodes[node_id] = OntologyNode(
             id=node_id,
             type=node_type,
             label=label,
-            description=_compact(description),
-            source_refs=source_refs or [],
-            attributes=attributes or {},
+            description=clean_description,
+            source_refs=clean_refs,
+            attributes=attrs,
             confidence=confidence,
             status=status,
         )
@@ -494,9 +590,10 @@ class OntologyBuilder:
         if not source or not target or source == target:
             return
         edge_id = _slug(f"{source}_{relation}_{target}", "edge")
+        clean_evidence = sorted({_compact(item, 160) for item in (evidence or []) if item})
         existing = self.edges.get(edge_id)
         if existing:
-            merged = sorted(set(existing.evidence + (evidence or [])))
+            merged = sorted(set(existing.evidence + clean_evidence))
             self.edges[edge_id] = existing.model_copy(update={"evidence": merged, "confidence": max(existing.confidence, confidence)})
             return
         self.edges[edge_id] = OntologyEdge(
@@ -504,7 +601,7 @@ class OntologyBuilder:
             source=source,
             target=target,
             relation=relation,
-            evidence=[_compact(item, 160) for item in (evidence or []) if item],
+            evidence=clean_evidence,
             confidence=confidence,
         )
 
@@ -542,8 +639,34 @@ def _add_paper_claim(
     relation = "reports_claim" if claim_type == "reported_claim" else "raises_question" if claim_type == "open_question" else "contains_interpretation"
     builder.add_edge(paper_id, claim_id, relation, [clean], 0.72)
     for term in _candidate_terms([clean], 6):
-        builder.add_edge(claim_id, builder.concept(term, source_refs[0] if source_refs else None), "mentions_concept", [clean], 0.65)
+        semantic_id = next(
+            (
+                node.id
+                for node in builder.nodes.values()
+                if node.label.strip().lower() == term.strip().lower()
+                and node.type in {"chemical", "species", "gene_or_enzyme", "method", "measurement", "process_condition"}
+            ),
+            None,
+        )
+        builder.add_edge(
+            claim_id,
+            semantic_id or builder.concept(term, source_refs[0] if source_refs else None),
+            "mentions_concept",
+            [clean],
+            0.65,
+        )
     return claim_id
+
+
+def _is_semantic_paper_label(label: str) -> bool:
+    normalized = re.sub(r"\s+", " ", str(label or "")).strip().lower()
+    if not normalized or normalized in QUERY_TERM_BLOCKLIST:
+        return False
+    if re.fullmatch(r"(?:19|20)\d{2}", normalized):
+        return False
+    if re.match(r"^(?:pmid|pmcid|doi|pdf_url|relevance score|deterministic relevance|matched terms|matched phrases|evidence role)\s*:", normalized):
+        return False
+    return normalized not in {"literature fetch", "objective-conditioned", "direct evidence", "partial relevance", "benchmark example"}
 
 
 def _add_project_belief(
@@ -610,6 +733,8 @@ def _add_extracted_paper_ontology(
                 "ontology_scope": "paper_extracted_entity",
                 "entity_type": entity_type,
                 "extraction_source": extraction_source,
+                "generation_method": f"{extraction_source}_paper_ontology_extraction",
+                "evidence_fingerprint": _stable_hash(evidence or [description, label]),
                 "evidence": [_compact(str(value), 220) for value in evidence[:5]],
             },
             confidence=max(0.35, min(float(confidence), 0.95)) if isinstance(confidence, (int, float)) else (0.82 if extraction_source == "llm" else 0.72),
@@ -701,7 +826,12 @@ def _add_work_template(builder: OntologyBuilder, root_id: str, work_template: Op
         for claim_index, insight in enumerate((finding.annotation_insights or [])[:6], start=1):
             _add_paper_claim(builder, paper_id, insight, "annotation_insight", claim_index, source_refs)
 
-        terms = list(dict.fromkeys([*(finding.labels or []), *_candidate_terms([finding.relevance, *finding.knowns, *finding.unknowns], 10)]))
+        semantic_labels = [label for label in (finding.labels or []) if _is_semantic_paper_label(label)]
+        terms = list(
+            dict.fromkeys(
+                [*semantic_labels, *_candidate_terms([finding.relevance, *finding.knowns, *finding.unknowns], 10)]
+            )
+        )
         for term in terms[:12]:
             concept_id = builder.concept(term, source_refs[0] if source_refs else None)
             pair = (paper_id, concept_id)
@@ -798,6 +928,14 @@ def _add_paper_subgraph(builder: OntologyBuilder, root_id: str, request: BuildPa
         builder.add_node(objective_id, "objective", request.objective_title, request.objective_definition or "", confidence=0.75)
         builder.add_edge(paper_id, objective_id, "read_through_lens", [request.objective_definition or request.objective_title], 0.75)
 
+    _add_extracted_paper_ontology(
+        builder,
+        paper_id,
+        fallback_paper_ontology_extraction(finding),
+        source_refs,
+        extraction_source="deterministic",
+    )
+
     claim_texts = [(text, "reported_claim") for text in finding.knowns[:10]]
     claim_texts.extend((text, "open_question") for text in finding.unknowns[:10])
     claim_texts.extend((text, "annotation_insight") for text in (finding.annotation_insights or [])[:8])
@@ -808,15 +946,9 @@ def _add_paper_subgraph(builder: OntologyBuilder, root_id: str, request: BuildPa
     for index, (text, claim_type) in enumerate(claim_texts, start=1):
         _add_paper_claim(builder, paper_id, text, claim_type, index, source_refs)
 
-    _add_extracted_paper_ontology(
-        builder,
-        paper_id,
-        fallback_paper_ontology_extraction(finding),
-        source_refs,
-        extraction_source="deterministic",
-    )
-
     for label in finding.labels[:10]:
+        if not _is_semantic_paper_label(label):
+            continue
         concept_id = builder.concept(label, source_refs[0] if source_refs else None)
         builder.add_edge(paper_id, concept_id, "tagged_with", [label], 0.7)
 
@@ -872,6 +1004,19 @@ def _query_augmentation(builder: OntologyBuilder, tacit_context: List[str]) -> O
     return _query_augmentation_from_items(list(builder.nodes.values()), list(builder.edges.values()), tacit_context)
 
 
+def _is_query_expansion_label(label: str) -> bool:
+    normalized = re.sub(r"\s+", " ", label.strip().lower())
+    if len(normalized) < 3 or normalized in QUERY_TERM_BLOCKLIST:
+        return False
+    if re.fullmatch(r"(?:19|20)\d{2}", normalized):
+        return False
+    if re.match(r"^(?:pmid|pmcid|doi|pdf_url|relevance score|matched terms|matched phrases)\s*:", normalized):
+        return False
+    if any(token in WEAK_CONCEPT_BIGRAM_TOKENS for token in normalized.split()):
+        return False
+    return not any(token in QUERY_TERM_BLOCKLIST for token in normalized.split())
+
+
 def _query_augmentation_from_items(
     nodes: List[OntologyNode],
     edges: List[OntologyEdge],
@@ -884,12 +1029,24 @@ def _query_augmentation_from_items(
         degree[edge.source] += 1
         degree[edge.target] += 1
 
-    concepts = [
+    expansion_nodes = [
         node
         for node in nodes
-        if node.status != "rejected" and node.type == "concept" and len(node.label) > 2
+        if node.status != "rejected"
+        and node.type in {"concept", "chemical", "species", "gene_or_enzyme", "method", "process_condition"}
+        and _is_query_expansion_label(node.label)
     ]
-    concepts.sort(key=lambda node: (-degree[node.id], node.label))
+    expansion_nodes.sort(key=lambda node: (-degree[node.id], node.type, node.label.lower(), node.id))
+    expanded_terms: List[str] = []
+    seen_terms: Set[str] = set()
+    for node in expansion_nodes:
+        normalized = node.label.strip().lower()
+        if normalized in seen_terms:
+            continue
+        seen_terms.add(normalized)
+        expanded_terms.append(node.label)
+        if len(expanded_terms) >= 18:
+            break
 
     filters: Dict[str, List[str]] = {"pmid": [], "pmcid": [], "doi": []}
     for node in nodes:
@@ -926,7 +1083,7 @@ def _query_augmentation_from_items(
         routing.append("planning")
 
     return OntologyQueryAugmentation(
-        expanded_terms=[node.label for node in concepts[:18]],
+        expanded_terms=expanded_terms,
         filters={key: values[:12] for key, values in filters.items() if values},
         reasoning_lenses=lenses,
         tacit_context=tacit_context[:8],
@@ -950,8 +1107,8 @@ def build_ontology_preview(project_id: int, request: BuildOntologyPreviewRequest
     return OntologyPreviewResponse(
         project_id=project_id,
         summary=summary,
-        nodes=list(builder.nodes.values()),
-        edges=list(builder.edges.values()),
+        nodes=_stable_node_list(builder.nodes.values()),
+        edges=_stable_edge_list(builder.edges.values()),
         query_augmentation=augmentation,
     )
 
@@ -982,8 +1139,8 @@ def _paper_ontology_response(project_id: int, builder: OntologyBuilder, paper_id
     return OntologyPreviewResponse(
         project_id=project_id,
         summary=summary,
-        nodes=list(builder.nodes.values()),
-        edges=list(builder.edges.values()),
+        nodes=_stable_node_list(builder.nodes.values()),
+        edges=_stable_edge_list(builder.edges.values()),
         query_augmentation=augmentation,
         persisted=False,
         sync_message=sync_message or summary,
@@ -998,6 +1155,15 @@ def build_paper_ontology(project_id: int, request: BuildPaperOntologyRequest) ->
 async def build_paper_ontology_enriched(project_id: int, request: BuildPaperOntologyRequest) -> OntologyPreviewResponse:
     builder, paper_id = _build_paper_ontology_builder(project_id, request)
     source_refs = _source_ref_from_ids(request.finding.source_ids or {})
+    extraction_mode = request.extraction_mode or "deterministic"
+    if extraction_mode != "enriched":
+        response = _paper_ontology_response(project_id, builder, paper_id)
+        response.sync_message = (
+            f"{response.summary} Used deterministic grounded extraction. "
+            "Set extraction_mode='enriched' to add opt-in LLM suggestions."
+        )
+        return response
+
     extracted = await llm_paper_ontology_extraction(
         request.finding,
         project_goal=request.project_goal or "",
@@ -1041,8 +1207,8 @@ def ontology_response_from_graph(
     return OntologyPreviewResponse(
         project_id=project_id,
         summary=summary,
-        nodes=validated_nodes,
-        edges=validated_edges,
+        nodes=_stable_node_list(validated_nodes),
+        edges=_stable_edge_list(validated_edges),
         query_augmentation=augmentation,
         persisted=persisted,
         sync_message=sync_message,

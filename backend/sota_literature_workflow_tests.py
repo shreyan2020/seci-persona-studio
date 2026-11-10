@@ -5,10 +5,59 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from sota_literature_workflow import WorkflowError, WorkflowTraceLogger, _dedupe_records, _parse_embeddings_payload
+from research_tools import _literature_relevance_profile
+from sota_literature_workflow import (
+    WorkflowError,
+    WorkflowTraceLogger,
+    _candidate_payload,
+    _dedupe_records,
+    _parse_embeddings_payload,
+    _record_grounded_knowns,
+)
 
 
 class SotaLiteratureWorkflowTests(unittest.TestCase):
+    def test_knowns_cannot_borrow_quantitative_claims_from_another_candidate(self):
+        record = {
+            "title": "De novo production of naringenin in engineered Saccharomyces cerevisiae",
+            "abstract": "The baseline produced 5.4 μM naringenin and the optimized strain exceeded 400 μM.",
+        }
+
+        knowns = _record_grounded_knowns(
+            record,
+            ["CRISPR interference increased naringenin to 421.6 mg/L."],
+        )
+
+        self.assertFalse(any("421.6" in claim or "CRISPR" in claim for claim in knowns))
+        self.assertTrue(any("5.4" in claim and "400" in claim for claim in knowns))
+
+    def test_candidate_payload_prioritizes_exact_product_host_over_recent_background(self):
+        profile = _literature_relevance_profile(
+            "naringenin from glucose in Saccharomyces cerevisiae genetic intervention titer"
+        )
+        records = [
+            {
+                "title": "The Therapeutic Potential of Naringenin: A Review of Clinical Trials",
+                "abstract": "Clinical review with background on naringenin.",
+                "year": "2024",
+                "cited_by_count": 500,
+            },
+            {
+                "title": "De novo production of naringenin in engineered Saccharomyces cerevisiae",
+                "abstract": "Naringenin was produced from glucose after pathway engineering with quantitative titers.",
+                "year": "2012",
+                "cited_by_count": 10,
+            },
+        ]
+
+        candidates, _ = _candidate_payload(records, relevance_profile=profile)
+
+        self.assertTrue(candidates[0]["title"].startswith("De novo production"))
+        self.assertGreater(
+            candidates[0]["deterministic_relevance"],
+            candidates[1]["deterministic_relevance"],
+        )
+
     def test_dedupe_records_merges_sources_by_doi(self):
         records = [
             {

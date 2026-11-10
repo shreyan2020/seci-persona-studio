@@ -3,6 +3,7 @@ import json
 import hashlib
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import Optional, Dict, Any, List
 from models import LogEventRequest
 
@@ -10,6 +11,7 @@ _UNSET = object()
 
 class DatabaseManager:
     def __init__(self, db_path: Optional[str] = None):
+        data_root = Path(__file__).resolve().parent / "data"
         if db_path:
             resolved_path = db_path
         else:
@@ -17,10 +19,10 @@ class DatabaseManager:
             if env_path:
                 resolved_path = env_path
             else:
-                default_path = "data/unspecified_queries.db"
-                legacy_path = "data/undspecified_queries.db"
-                resolved_path = legacy_path if os.path.exists(legacy_path) else default_path
-        self.db_path = resolved_path
+                default_path = data_root / "unspecified_queries.db"
+                legacy_path = data_root / "undspecified_queries.db"
+                resolved_path = legacy_path if legacy_path.exists() else default_path
+        self.db_path = str(Path(resolved_path).resolve())
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         self.init_database()
 
@@ -238,6 +240,18 @@ class DatabaseManager:
         ''')
 
         cursor.execute('''
+            CREATE TABLE IF NOT EXISTS llm_cache (
+                cache_key TEXT PRIMARY KEY,
+                task_type TEXT NOT NULL,
+                model TEXT NOT NULL,
+                payload_json TEXT NOT NULL,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
+        cursor.execute('''
             CREATE TABLE IF NOT EXISTS ontology_nodes (
                 project_id INTEGER NOT NULL,
                 node_id TEXT NOT NULL,
@@ -375,6 +389,11 @@ class DatabaseManager:
         cursor.execute('''
             CREATE INDEX IF NOT EXISTS idx_workspace_memory_scope_updated
             ON workspace_memory(scope, updated_at)
+        ''')
+
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_llm_cache_task_updated
+            ON llm_cache(task_type, updated_at DESC)
         ''')
 
         cursor.execute('''
@@ -555,6 +574,69 @@ class DatabaseManager:
         """Generate a simple hash signature for a query."""
         return hashlib.md5(query.lower().strip().encode()).hexdigest()[:16]
 
+    def llm_cache_key(self, task_type: str, inputs: Dict[str, Any]) -> str:
+        """Generate a stable cache key for deterministic LLM tasks."""
+        normalized = json.dumps(
+            {"task_type": task_type, "inputs": inputs},
+            sort_keys=True,
+            ensure_ascii=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+    def get_llm_cache(self, cache_key: str) -> Optional[Dict[str, Any]]:
+        conn = self._connect()
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM llm_cache WHERE cache_key = ?', (cache_key,))
+        row = cursor.fetchone()
+        conn.close()
+        if not row:
+            return None
+        data = dict(row)
+        try:
+            data["payload"] = json.loads(data.pop("payload_json") or "{}")
+        except json.JSONDecodeError:
+            data["payload"] = {}
+        try:
+            data["metadata"] = json.loads(data.pop("metadata_json") or "{}")
+        except json.JSONDecodeError:
+            data["metadata"] = {}
+        return data
+
+    def upsert_llm_cache(
+        self,
+        *,
+        cache_key: str,
+        task_type: str,
+        model: str,
+        payload: Dict[str, Any],
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        conn = self._connect()
+        cursor = conn.cursor()
+        cursor.execute(
+            '''
+            INSERT INTO llm_cache (cache_key, task_type, model, payload_json, metadata_json, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(cache_key) DO UPDATE SET
+                task_type = excluded.task_type,
+                model = excluded.model,
+                payload_json = excluded.payload_json,
+                metadata_json = excluded.metadata_json,
+                updated_at = excluded.updated_at
+            ''',
+            (
+                cache_key,
+                task_type,
+                model,
+                json.dumps(payload),
+                json.dumps(metadata or {}),
+                datetime.now(),
+            ),
+        )
+        conn.commit()
+        conn.close()
+
     def get_workspace_memory(self, workspace_key: str) -> Optional[Dict[str, Any]]:
         conn = self._connect()
         cursor = conn.cursor()
@@ -682,9 +764,19 @@ class DatabaseManager:
         edges: List[Dict[str, Any]],
         sync_source: str = "workbench",
         input_summary: str = "",
+        replace_generated: bool = False,
     ) -> Dict[str, Any]:
         conn = self._connect()
         cursor = conn.cursor()
+        if replace_generated:
+            cursor.execute(
+                "DELETE FROM ontology_edges WHERE project_id = ? AND generated_by = ? AND status = 'inferred'",
+                (project_id, sync_source),
+            )
+            cursor.execute(
+                "DELETE FROM ontology_nodes WHERE project_id = ? AND generated_by = ? AND status = 'inferred'",
+                (project_id, sync_source),
+            )
         for node in nodes:
             cursor.execute(
                 '''

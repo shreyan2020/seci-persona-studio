@@ -1,0 +1,47 @@
+{
+  "software-smoke": {
+    "source": "backend/data/eval_runs/local_smoke/suite_summary.md",
+    "sha256": "80960439f623c22db6f2cf2fdb5ed22ba988c2a6404d3faae63be357c4569ced",
+    "snapshot_sha256": "f1565a132a19f3b119c516782fff223551e48511e42d3509b86b6eb1ed118130"
+  },
+  "scifact-sample10": {
+    "source": "backend/data/eval_runs/scifact_sample10_system_ablation/scifact_retrieval_sample10/scifact_sample10_retrieval_report.md",
+    "sha256": "2c4b3c758ef72ffa91878bb00e3dcbce91b66701d6484798f5b2336532fd816a",
+    "snapshot_sha256": "a75c776fec4f71aad97b27425ce3281c23989bbd7fbb8ed25481a9ab4a5e7426"
+  },
+  "geometric-retrieval": {
+    "source": "research/evidence_geometry/RESULTS.md",
+    "sha256": "9329efaeea87a0684edc6aa526abb99d650aac398563203162c0c46e8a986ca6",
+    "snapshot_sha256": "9e0d311aa14c12ad8b150a3028e0057227caac7058bb10f5e9d8389e77f5debc"
+  },
+  "context-retrieval": {
+    "source": "research/evidence_acquisition/FINDINGS.md",
+    "sha256": "5eaf90358cfad5d6f41bd048a2d4929c63e7f17516418d8a13e16940874391c0",
+    "snapshot_sha256": "7c21eac2cd28b68deb332da9e52368ee51fff106b61b9ab5fc826bcbe4688643"
+  },
+  "fresh-paper-reconciliation": {
+    "source": "research/wave_reconciliation/real_papers_v2/RESULTS.md",
+    "sha256": "9c6f6e1f1e589ce5f7254b2c1e5d0b42edf7b819db20f76609ca7146bc3ce589",
+    "snapshot_sha256": "9c6f6e1f1e589ce5f7254b2c1e5d0b42edf7b819db20f76609ca7146bc3ce589"
+  },
+  "role-aggregation": {
+    "source": "research/wave_reconciliation/role_aggregation_v4/RESULTS.md",
+    "sha256": "49cec4a6a2ac87795e246682cfb8353d3d18fd32ee317538f6aa49b61c67bc49",
+    "snapshot_sha256": "49cec4a6a2ac87795e246682cfb8353d3d18fd32ee317538f6aa49b61c67bc49"
+  },
+  "evidence-graph-v9": {
+    "source": "research/wave_reconciliation/evidence_geometry_v9/RESULTS.md",
+    "sha256": "5bf04a99d9e4cb1369d4802fe822e58b246f93b77926c1f79b893e250b2b1989",
+    "snapshot_sha256": "5bf04a99d9e4cb1369d4802fe822e58b246f93b77926c1f79b893e250b2b1989"
+  },
+  "context-geometry-v10": {
+    "source": "research/wave_reconciliation/agent_context_geometry_v10/RESULTS.md",
+    "sha256": "f6bddf94a8a1da2828ef02dcc4cc2cd6968034bef02700b6cd16022e1295a47c",
+    "snapshot_sha256": "f6bddf94a8a1da2828ef02dcc4cc2cd6968034bef02700b6cd16022e1295a47c"
+  },
+  "binding-geometry-v11": {
+    "source": "research/wave_reconciliation/binding_geometry_v11/RESULTS.md",
+    "sha256": "e9b6611ee6162b7155743e0eb0ec8917ba0d0ee86d6d323a4fb46046efda70e6",
+    "snapshot_sha256": "a2ae026f399196945be2e9202463b353eeef94d40b9207d9eb93c3730235a523"
+  }
+}

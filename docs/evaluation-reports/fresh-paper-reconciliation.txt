@@ -1,0 +1,83 @@
+# Fresh-paper outcome and citation repair evaluation
+
+The repaired method does not beat either existing DSM baseline. On 48 questions from 24 previously unused paper IDs, it matches 36 reference labels (75.0%), versus 41 (85.4%) for direct reading and 40 (83.3%) for generic review. It adds no correct answer over direct reading and loses five reference-label matches through abstention. Keep the direct reader as the baseline; do not promote this decoder.
+
+These scores measure agreement with the original annotations. A post-result source audit found missing comparison context and some apparent question/rationale/label inconsistencies. No labels or cases were changed or excluded. This is an excerpt-based scientific comparison experiment, not an end-to-end full-paper retrieval evaluation or a test of wave propagation.
+
+## What was repaired
+
+- Source citations are retrieved from immutable, content-addressed excerpts. Models select IDs instead of regenerating quotations. HTML entities, Unicode compatibility variants and whitespace are normalized; original source strings and indices remain available. This does not repair all legacy character-encoding corruption.
+- Every method receives the same named outcome catalogue. The candidate assigns each finding to an outcome, treatment comparison and effect. A maximal literal endpoint rule preserves qualifiers such as clinical versus generic pregnancy when literal matches exist; otherwise it retains the model's fallible mapping.
+- The decoder derives its answer and citations from compatible target findings. This repairs the exposed development examples, but can override a sensible model abstention when the structured ledger itself is wrong.
+
+All methods had zero out-of-range source IDs in the fresh run. One raw-ledger answer had no eligible supporting citation and was converted to abstention; its recorded `invalid_citations` error is not a nonexistent source ID. Source existence is not semantic support. The repair's clinical-pregnancy example succeeded in development; subtype matching remains unreliable on fresh cases.
+
+## Protocol and exposure
+
+The [protocol](PROTOCOL.md), two [development](AMENDMENT_01.md) [amendments](AMENDMENT_02.md), and [method hashes](method_freeze.json) predate fresh source preparation. Six exposed questions were used for adaptation: 3/6 after the first revision, 4/6 after the second, and 6/6 after reinterpreting cached outputs with a third deterministic decoder revision. The third revision exceeded the original two-revision plan and was explicitly recorded before fresh evaluation; it used no additional model calls. These are six reused development examples, not 18 independent observations.
+
+Fresh selection used the pinned Evidence Inference release's official training split, filtering to permitted IDs before accessing annotation evidence or labels. A conservative audit of 286 local metadata/report files excluded 406 of 743 training IDs. Hash ordering selected 24 of the remaining 337 IDs, two distinct outcome questions per paper, without label balancing. There are 121 unique canonical excerpts across papers, no known prior article-ID overlap, and no exact source-pool duplicates. Seven candidate papers lacked two eligible distinct outcomes. See [selection audit](fresh_001/selection_audit.json) and [exposure audit](exposure_audit.json).
+
+"Fresh" means article IDs not found in the audited local records. It does not establish independence of trials or publication families, absence from model pretraining, or absence from unrecorded prior work. The source pools are annotation-selected excerpts. Official test labels, sealed papers and reserved cohorts were not used. The prototype was not trained on this sample.
+
+The same pinned local Qwen3.5 9.7B Q4 model, temperature 0, seed 41, context ceiling 8192 and output ceiling 1000 were used. Direct reading is the existing DSM prompt with the shared normalized sources and catalogue appended. Both second-pass methods receive that same direct draft. Generic and candidate calls alternate order. This preserves baseline methods and model weights, while applying the common citation/input repair to all arms; it is not a byte-for-byte rerun of v1 inputs.
+
+## Frozen results
+
+| Method | Reference matches / 48 | Wrong decisive answers | Abstentions | Both questions correct / 24 papers |
+|---|---:|---:|---:|---:|
+| Direct DSM reader | 41 (85.4%) | 5 | 2 | 18 |
+| Generic second-pass review | 40 (83.3%) | 4 | 4 | 18 |
+| Raw outcome ledger | 36 (75.0%) | 1 | 11 | 16 |
+| Ledger aggregation without literal anchors | 36 (75.0%) | 3 | 9 | 16 |
+| Complete repaired method | 36 (75.0%) | 3 | 9 | 16 |
+
+The last three rows reuse the same candidate responses, so they incur no additional inference. Abstentions count as nonmatches in the primary metric. The complete method's accepted-answer error is 3/39 (7.7%), versus direct 5/46 (10.9%); this coverage tradeoff is not an accuracy improvement.
+
+Repaired minus direct is **-10.4 percentage points**, with a paper-cluster bootstrap 95% interval of [-18.8, -2.1] points. There are zero question wins and five losses across five papers; the two-sided exact paper sign-test p-value is 0.0625. Against generic review the difference is -8.3 points, interval [-16.7, -2.1], with zero wins, four losses and p=0.125. Bootstrap intervals use 10,000 paper resamples, seed 20261107. The discrete sign tests do not cross 0.05; the small-cohort bootstrap intervals should not be presented as robust confirmatory significance. The observed comparison supplies no evidence of an improvement.
+
+Literal anchoring was used on 42 ledger rows and changed three outcome assignments across two questions, but **changed no final prediction** relative to the no-anchor control. Aggregation converted two raw-ledger abstentions into incorrect decisive answers and added no correct answers. Thus the development gain did not generalize.
+
+## Failure and source audit
+
+All 12 questions on which any method failed to match the annotation were reviewed. [The case-level audit](fresh_001/evaluation/qualitative_audit.json) retains source IDs, predictions and the distinction between excerpt inspection and primary-paper checks. It is a post-hoc assistant review, not independent expert adjudication. Most reference-matching answers were not separately adjudicated for semantic citation support.
+
+| Cases | What the audit found |
+|---|---|
+| 11335, 11336; PMC1501010 | Total BPRS scores were assigned to positive/negative symptom subscales. The raw response correctly expressed uncertainty, but erroneous TARGET ledger rows caused aggregation to turn both abstentions into wrong answers. Literal anchors did not cover these long endpoint names. |
+| 12742; PMC3701833 | All methods reported the lycopene-versus-control direction although the question reverses intervention and comparator. The candidate's comparison flag failed to catch it. |
+| 13018; PMC5739614 | One lower-frequency biomarker finding was labeled no difference, another decrease, creating a false conflict. The query also asks for biomarker levels while excerpts describe proportions above a threshold. |
+| 13472, 13473; PMC5654748 | The excerpts name Web 1.0, but the query says 10,000 Steps. The paper establishes that alias; the supplied excerpts do not. Both candidate answers abstain. |
+| 12450, 12451; PMC3634960 | Group A/B/C protocol definitions are absent from the source pool. The candidate abstains; baselines also borrow the total-walking-distance result for the distinct initial-claudication endpoint. |
+| 13698; PMC3770494 | The annotation's increase concerns assumed treatment, while the query asks about actual drug assignment. Candidate abstention is defensible under the supplied evidence. |
+| 12741; PMC3701833 | The query reverses the comparison, but its decrease label follows the paper's lycopene-versus-control direction. Candidate abstention identifies that mismatch; matching the label does not establish a correctly oriented claim. |
+| 13835; PMC5988794 | The supplied iHOT excerpt concerns surgery timing within one arm, while the question asks surgery versus therapy. All methods abstain. The paper's primary between-arm result differs from the annotation's no-difference label. |
+| 11575; PMC1550249 | The query outcome is a subgroup description, while excerpts discuss compaction/blastocyst outcomes and other comparisons. No eligible target citation supports the raw candidate's decisive label; the decoder abstains. |
+
+The five extra abstentions versus direct are 13698, 13473, 13018, 12451 and 12741. They combine true model errors, missing context and apparent reference problems. They must not all be described as scientifically worse decisions solely because of label disagreement.
+
+Primary sources checked after scores were frozen:
+
+- The [methylphenidate paper](https://pmc.ncbi.nlm.nih.gov/articles/PMC3770494/) distinguishes assumed treatment from actual allocation and reports no actual-treatment mood difference. This supports the comparison-mismatch diagnosis for 13698.
+- The [WALK 2.0 paper](https://pmc.ncbi.nlm.nih.gov/articles/PMC5654748/) explicitly identifies 10,000 Steps as Web 1.0. This confirms missing alias context rather than evidence that the treatments are different.
+- The [RIPC trial abstract](https://pubmed.ncbi.nlm.nih.gov/23778346/) supplies the A/B/C treatment sequences. Its reported initial-claudication improvement is a within-group change; that alone does not settle the query's between-sequence comparison.
+- The [lycopene trial abstract](https://pubmed.ncbi.nlm.nih.gov/23837126/) reports reduced gingival inflammation and 8-OHdG for lycopene relative to placebo/sham. The inverse query requires explicit direction handling.
+- The [UK FASHIoN paper](https://pmc.ncbi.nlm.nih.gov/articles/PMC5988794/) reports a primary 12-month adjusted iHOT-33 difference of 6.8 points favoring surgery (95% CI 1.7-12.0), separately from its null within-surgery timing comparison. This makes the stored question/rationale pairing questionable; it does not authorize changing the benchmark after seeing predictions.
+
+## Execution, costs and validation
+
+All 144 fresh requests completed with no transport failures or output-limit truncations. Fresh request time was 1096.3 seconds (18.27 minutes). The 12 development requests took 121.9 seconds; total new request time was 1218.1 seconds (20.30 minutes), below the 60-minute cap. Six development software checks passed before the fresh run. No paid service, model download, training or remote GPU was used.
+
+| Fresh stage | Calls | Request seconds | Input tokens | Generated tokens |
+|---|---:|---:|---:|---:|
+| Direct | 48 | 277.9 | 25,065 | 4,983 |
+| Generic review, additional | 48 | 325.3 | 31,950 | 5,468 |
+| Candidate ledger, additional | 48 | 493.1 | 40,878 | 8,784 |
+
+The direct-plus-candidate pipeline generated 13,767 tokens, 2.76 times direct alone, for no accuracy gain. Request time is operational local timing, not a controlled latency benchmark. Equal output ceilings are not equal realized compute.
+
+The first scoring attempt failed in a request-equality audit because it searched for unescaped outcome names inside JSON text. It wrote no scores. The original scorer and failure are preserved; [scoring amendment 01](scoring_amendment_01.json) decodes the JSON before comparison. No prediction parsing, scoring rule, labels or model outputs changed, and no inference was repeated. The completed audit verified all 144 matched requests, model/input constraints and zero post-result exclusions. [Summary](fresh_001/evaluation/summary.json), [predictions](fresh_001/evaluation/predictions.json), [execution receipt](fresh_001/receipt.json) and [audit](fresh_001/evaluation/audit.json) are the authoritative results.
+
+## Decision
+
+Retain immutable source addressing as a useful infrastructure repair. Reject the claim that this outcome ledger and aggregation decoder improve the DSM reader on fresh papers. Do not treat the six exposed successes as validation, or silently remove the two fresh aggregation failures. A next experiment should obtain independently reviewed source-to-endpoint and treatment-direction labels, retrieve arm aliases and methods context for every arm, and test whether explicit semantic binding improves over the same direct reader. That experiment has not been run here.

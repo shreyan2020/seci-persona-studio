@@ -1,14 +1,214 @@
-import httpx
+import asyncio
+from collections import deque
+from datetime import datetime, timezone
+import hashlib
 import inspect
 import json
+import logging
+import math
 import os
+import time
+import httpx
 from typing import Optional, Dict, Any, List, Callable
 from models import Objective, EvidenceItem
+
+logger = logging.getLogger(__name__)
 
 class OllamaClient:
     def __init__(self, base_url: Optional[str] = None, model: Optional[str] = None):
         self.base_url = base_url or os.getenv("OLLAMA_URL") or os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-        self.model = model or os.getenv("OLLAMA_MODEL", "qwen2.5:7b")
+        self.model = model or os.getenv("OLLAMA_MODEL", "qwen3.5:latest")
+        self._client: Optional[httpx.AsyncClient] = None
+        self._client_lock = asyncio.Lock()
+        self._inflight: Dict[str, asyncio.Task] = {}
+        self._inflight_lock = asyncio.Lock()
+        self._closed = False
+        self._max_inflight = max(1, int(os.getenv("OLLAMA_MAX_INFLIGHT_REQUESTS", "64")))
+        self._generation_slots = asyncio.Semaphore(max(1, int(os.getenv("OLLAMA_MAX_CONCURRENT_GENERATIONS", "2"))))
+        self._metrics = deque(maxlen=max(100, int(os.getenv("OLLAMA_METRICS_BUFFER_SIZE", "1000"))))
+
+    async def start(self, *, preload: bool = False) -> None:
+        await self._get_client()
+        if preload:
+            try:
+                await self.generate("", temperature=0.0, top_p=1.0)
+            except Exception as exc:
+                logger.warning("Ollama preload failed; the first request will retry normally: %s", exc)
+
+    async def close(self) -> None:
+        self._closed = True
+        tasks = list(self._inflight.values())
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self._inflight.clear()
+        async with self._client_lock:
+            client, self._client = self._client, None
+        if client is not None:
+            await client.aclose()
+
+    async def _get_client(self) -> httpx.AsyncClient:
+        if self._closed:
+            raise RuntimeError("Ollama client is closed")
+        if self._client is not None and not self._client.is_closed:
+            return self._client
+        async with self._client_lock:
+            if self._client is None or self._client.is_closed:
+                max_connections = max(1, int(os.getenv("OLLAMA_HTTP_MAX_CONNECTIONS", "20")))
+                self._client = httpx.AsyncClient(
+                    limits=httpx.Limits(
+                        max_connections=max_connections,
+                        max_keepalive_connections=max_connections,
+                        keepalive_expiry=60.0,
+                    )
+                )
+            return self._client
+
+    def _clear_inflight(self, cache_key: str, task: asyncio.Task) -> None:
+        # Same event loop: no await or extra cleanup task is needed.
+        if self._inflight.get(cache_key) is task:
+            self._inflight.pop(cache_key, None)
+        if not task.cancelled():
+            task.exception()  # Observe failures even if every waiter disconnected.
+
+    def _keep_alive(self) -> Any:
+        value = os.getenv("OLLAMA_KEEP_ALIVE", "-1").strip()
+        if not value:
+            return None
+        try:
+            return int(value)
+        except ValueError:
+            return value
+
+    def _timeout(self, timeout_seconds: Optional[float] = None) -> httpx.Timeout:
+        raw = timeout_seconds if timeout_seconds is not None else os.getenv("OLLAMA_TIMEOUT_SECONDS", "90")
+        try:
+            total = max(5.0, float(raw))
+        except (TypeError, ValueError):
+            total = 90.0
+        return httpx.Timeout(total, connect=min(10.0, total))
+
+    def _record_metric(
+        self,
+        *,
+        operation: str,
+        payload: Dict[str, Any],
+        elapsed_ms: float,
+        result: Optional[Dict[str, Any]] = None,
+        error: Optional[str] = None,
+        cache_status: Optional[str] = None,
+    ) -> None:
+        result = result or {}
+        prompt_tokens = int(result.get("prompt_eval_count") or 0)
+        output_tokens = int(result.get("eval_count") or 0)
+        prompt_ms = float(result.get("prompt_eval_duration") or 0) / 1_000_000
+        eval_ms = float(result.get("eval_duration") or 0) / 1_000_000
+        metric = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "operation": operation,
+            "model": payload.get("model") or self.model,
+            "elapsed_ms": round(elapsed_ms, 3),
+            "load_ms": round(float(result.get("load_duration") or 0) / 1_000_000, 3),
+            "prompt_eval_ms": round(prompt_ms, 3),
+            "eval_ms": round(eval_ms, 3),
+            "prompt_tokens": prompt_tokens,
+            "output_tokens": output_tokens,
+            "prompt_tokens_per_second": round(prompt_tokens * 1000 / prompt_ms, 3) if prompt_ms else None,
+            "output_tokens_per_second": round(output_tokens * 1000 / eval_ms, 3) if eval_ms else None,
+            "cache_status": cache_status,
+            "error": error,
+        }
+        self._metrics.append(metric)
+        logger.info("llm_inference_metric %s", json.dumps(metric, separators=(",", ":")))
+
+    def metrics_snapshot(self) -> Dict[str, Any]:
+        rows = list(self._metrics)
+        completed = [row for row in rows if not row.get("error")]
+        cache_hits = sum(row.get("cache_status") == "hit" for row in rows)
+        cache_misses = sum(row.get("cache_status") == "miss" for row in rows)
+
+        def percentile(values: List[float], fraction: float) -> Optional[float]:
+            if not values:
+                return None
+            ordered = sorted(values)
+            index = min(len(ordered) - 1, max(0, math.ceil(len(ordered) * fraction) - 1))
+            return round(ordered[index], 3)
+
+        durations = [float(row["elapsed_ms"]) for row in completed if row.get("cache_status") is None]
+        return {
+            "model": self.model,
+            "samples": len(rows),
+            "requests": len(durations),
+            "errors": sum(bool(row.get("error")) for row in rows),
+            "cache_hits": cache_hits,
+            "cache_misses": cache_misses,
+            "cache_hit_rate": round(cache_hits / (cache_hits + cache_misses), 4) if cache_hits + cache_misses else None,
+            "latency_ms": {
+                "p50": percentile(durations, 0.50),
+                "p95": percentile(durations, 0.95),
+            },
+            "recent": rows[-25:],
+        }
+
+    async def _post_json(
+        self,
+        path: str,
+        payload: Dict[str, Any],
+        *,
+        operation: str,
+        timeout_seconds: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        started = time.perf_counter()
+        try:
+            async with self._generation_slots:
+                client = await self._get_client()
+                response = await client.post(
+                    f"{self.base_url}{path}",
+                    json=payload,
+                    timeout=self._timeout(timeout_seconds),
+                )
+            response.raise_for_status()
+            result = response.json()
+            self._record_metric(
+                operation=operation,
+                payload=payload,
+                elapsed_ms=(time.perf_counter() - started) * 1000,
+                result=result,
+            )
+            return result
+        except Exception as exc:
+            self._record_metric(
+                operation=operation,
+                payload=payload,
+                elapsed_ms=(time.perf_counter() - started) * 1000,
+                error=f"{type(exc).__name__}: {exc}",
+            )
+            raise
+
+    async def _resolve_installed_model(self, requested_model: str) -> Optional[str]:
+        """Resolve a missing Ollama tag to an installed tag from the same model family."""
+        client = await self._get_client()
+        response = await client.get(
+            f"{self.base_url}/api/tags",
+            timeout=self._timeout(15),
+        )
+        response.raise_for_status()
+        installed = sorted(
+            str(item.get("name") or item.get("model") or "").strip()
+            for item in response.json().get("models", [])
+        )
+        installed = [name for name in installed if name]
+        family = requested_model.split(":", 1)[0].removesuffix("-instruct")
+        preferred = [
+            requested_model.removesuffix("-instruct"),
+            f"{family}:latest",
+        ]
+        for candidate in preferred:
+            if candidate in installed:
+                return candidate
+        family_matches = [name for name in installed if name.split(":", 1)[0] == family]
+        return family_matches[0] if family_matches else None
     
     async def generate(
         self,
@@ -16,6 +216,10 @@ class OllamaClient:
         temperature: float = 0.7,
         top_p: float = 0.9,
         model: Optional[str] = None,
+        timeout_seconds: Optional[float] = None,
+        format_json: bool = False,
+        num_predict: Optional[int] = None,
+        num_ctx: Optional[int] = None,
     ) -> str:
         """Generate text from Ollama model."""
         payload = {
@@ -27,22 +231,50 @@ class OllamaClient:
                 "top_p": top_p
             }
         }
+        requested_context = num_ctx or os.getenv("OLLAMA_NUM_CTX")
+        if requested_context is not None:
+            payload["options"]["num_ctx"] = max(2048, min(int(requested_context), 131072))
+        if num_predict is not None:
+            payload["options"]["num_predict"] = max(1, int(num_predict))
+        keep_alive = self._keep_alive()
+        if keep_alive is not None:
+            payload["keep_alive"] = keep_alive
+        if format_json:
+            payload["format"] = "json"
+            # Structured extraction needs the final JSON within its token/time budget.
+            # Qwen3.5 can otherwise loop in thinking before producing any answer.
+            payload["think"] = False
         
-        # Use longer timeout for LLM generation (5 minutes)
-        timeout = httpx.Timeout(300.0, connect=10.0)
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.post(f"{self.base_url}/api/generate", json=payload)
+        try:
+            result = await self._post_json(
+                "/api/generate", payload, operation="generate", timeout_seconds=timeout_seconds
+            )
+        except httpx.HTTPStatusError as exc:
             active_model = model or self.model
-            if response.status_code == 404 and active_model.endswith("-instruct"):
-                fallback_model = active_model.replace("-instruct", "")
-                payload["model"] = fallback_model
-                response = await client.post(f"{self.base_url}/api/generate", json=payload)
-                if response.is_success:
-                    if model is None:
-                        self.model = fallback_model
-            response.raise_for_status()
-            result = response.json()
-            return result.get("response", "")
+            if exc.response.status_code != 404:
+                raise
+            fallback_model = await self._resolve_installed_model(active_model)
+            if not fallback_model or fallback_model == active_model:
+                raise
+            logger.warning(
+                "Ollama model %s is not installed; using equivalent installed tag %s",
+                active_model,
+                fallback_model,
+            )
+            payload["model"] = fallback_model
+            result = await self._post_json(
+                "/api/generate", payload, operation="generate_fallback", timeout_seconds=timeout_seconds
+            )
+            if model is None:
+                self.model = fallback_model
+        answer = result.get("response", "")
+        if format_json and (not isinstance(answer, str) or not answer.strip()):
+            raise ValueError(
+                f"Structured extraction returned no answer from {payload['model']} "
+                f"(done_reason={result.get('done_reason', 'unknown')}). "
+                "No notes were extracted; retry after checking the model runtime."
+            )
+        return answer
     
     async def generate_json(
         self,
@@ -51,6 +283,9 @@ class OllamaClient:
         temperature: float = 0.7,
         top_p: float = 0.9,
         model: Optional[str] = None,
+        timeout_seconds: Optional[float] = None,
+        num_predict: Optional[int] = None,
+        num_ctx: Optional[int] = None,
     ) -> Dict[str, Any]:
         """Generate and parse JSON from Ollama with retry logic."""
         initial_prompt = f"{prompt}\n\nIMPORTANT: Return ONLY valid JSON. No markdown, no code blocks, no explanation."
@@ -63,6 +298,10 @@ class OllamaClient:
                     temperature=temperature,
                     top_p=top_p,
                     model=model,
+                    timeout_seconds=timeout_seconds,
+                    format_json=True,
+                    num_predict=num_predict,
+                    **({"num_ctx": num_ctx} if num_ctx is not None else {}),
                 )
             else:
                 retry_prompt = f"{initial_prompt}\n\nYour previous output was invalid JSON. Please fix it and return ONLY valid JSON.\n\nPrevious invalid output:\n{response_text}"
@@ -71,6 +310,10 @@ class OllamaClient:
                     temperature=temperature,
                     top_p=top_p,
                     model=model,
+                    timeout_seconds=timeout_seconds,
+                    format_json=True,
+                    num_predict=num_predict,
+                    **({"num_ctx": num_ctx} if num_ctx is not None else {}),
                 )
             
             try:
@@ -84,6 +327,90 @@ class OllamaClient:
         
         raise ValueError("Unexpected error in JSON generation")
 
+    async def generate_json_cached(
+        self,
+        *,
+        cache: Any,
+        task_type: str,
+        prompt: str,
+        cache_version: int = 1,
+        cache_inputs: Optional[Dict[str, Any]] = None,
+        max_retries: int = 1,
+        temperature: float = 0.2,
+        top_p: float = 0.9,
+        model: Optional[str] = None,
+        timeout_seconds: Optional[float] = None,
+        num_predict: Optional[int] = None,
+        num_ctx: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        active_model = model or self.model
+        key_inputs = {
+            "version": cache_version,
+            "structured_generation_contract": 2,
+            "think": False,
+            "model": active_model,
+            "model_revision": os.getenv("OLLAMA_MODEL_REVISION", ""),
+            "temperature": temperature,
+            "top_p": top_p,
+            "num_predict": num_predict,
+            "num_ctx": num_ctx or os.getenv("OLLAMA_NUM_CTX"),
+            "prompt_sha256": hashlib.sha256(prompt.encode("utf-8")).hexdigest(),
+            "inputs": cache_inputs or {},
+        }
+        cache_key = cache.llm_cache_key(task_type, key_inputs)
+        cached = cache.get_llm_cache(cache_key)
+        if cached is not None:
+            self._record_metric(
+                operation=task_type,
+                payload={"model": active_model},
+                elapsed_ms=0.0,
+                cache_status="hit",
+            )
+            return cached.get("payload") or {}
+
+        self._record_metric(
+            operation=task_type,
+            payload={"model": active_model},
+            elapsed_ms=0.0,
+            cache_status="miss",
+        )
+        async with self._inflight_lock:
+            if self._closed:
+                raise RuntimeError("Ollama client is closed")
+            task = self._inflight.get(cache_key)
+            if task is None:
+                if len(self._inflight) >= self._max_inflight:
+                    raise RuntimeError("Model request queue is full; retry after current requests finish")
+                async def generate_and_store() -> Dict[str, Any]:
+                    payload = await self.generate_json(
+                        prompt,
+                        max_retries=max_retries,
+                        temperature=temperature,
+                        top_p=top_p,
+                        model=model,
+                        timeout_seconds=timeout_seconds,
+                        num_predict=num_predict,
+                        **({"num_ctx": num_ctx} if num_ctx is not None else {}),
+                    )
+                    cache.upsert_llm_cache(
+                        cache_key=cache_key,
+                        task_type=task_type,
+                        model=active_model,
+                        payload=payload,
+                        metadata={
+                            "cache_version": cache_version,
+                            "model_revision": os.getenv("OLLAMA_MODEL_REVISION", ""),
+                        },
+                    )
+                    return payload
+
+                task = asyncio.create_task(generate_and_store())
+                self._inflight[cache_key] = task
+                task.add_done_callback(
+                    lambda completed, key=cache_key: self._clear_inflight(key, completed)
+                )
+        return await asyncio.shield(task)
+
     async def chat(
         self,
         messages: List[Dict[str, Any]],
@@ -91,6 +418,7 @@ class OllamaClient:
         temperature: float = 0.2,
         top_p: float = 0.9,
         model: Optional[str] = None,
+        timeout_seconds: Optional[float] = None,
     ) -> Dict[str, Any]:
         payload: Dict[str, Any] = {
             "model": model or self.model,
@@ -104,11 +432,13 @@ class OllamaClient:
         if tools:
             payload["tools"] = tools
 
-        timeout = httpx.Timeout(300.0, connect=10.0)
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            response = await client.post(f"{self.base_url}/api/chat", json=payload)
-            response.raise_for_status()
-            return response.json()
+        keep_alive = self._keep_alive()
+        if keep_alive is not None:
+            payload["keep_alive"] = keep_alive
+
+        return await self._post_json(
+            "/api/chat", payload, operation="chat", timeout_seconds=timeout_seconds
+        )
 
     async def run_tool_loop(
         self,

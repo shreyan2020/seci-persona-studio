@@ -171,7 +171,17 @@ async def parse_scientific_pdf(pdf_path: str | Path) -> Dict[str, Any]:
             errors.append(f"docling_url: {exc}")
 
     if not configured:
-        raise ScientificPdfParsingError("No scientific PDF parser is configured. Set GROBID_URL, DOCLING_ENABLED=1, or DOCLING_URL.")
+        from document_pipeline import parse_document
+        document = await parse_document(pdf_path)
+        configured.append("liteparse")
+        sections = {}
+        for passage in document['passages']:
+            sections.setdefault(passage['section'], []).append(passage['text'])
+        results.append({
+            'parser': 'liteparse', 'title': '', 'abstract': '', 'authors': [], 'references': [],
+            'sections': [{'heading': heading, 'text': '\n'.join(texts)} for heading, texts in sections.items()],
+            'text_excerpt': '\n'.join(p['text'] for p in document['passages']),
+        })
     if not results:
         raise ScientificPdfParsingError("Configured scientific PDF parsers all failed: " + "; ".join(errors))
 

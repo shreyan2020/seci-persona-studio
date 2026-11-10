@@ -190,6 +190,19 @@ class OntologyQueryAugmentation(BaseModel):
     search_routing: List[str] = Field(default_factory=list)
 
 
+class OntologyUsageTrace(BaseModel):
+    id: str
+    purpose: str
+    title: str = ""
+    summary: str = ""
+    node_ids: List[str] = Field(default_factory=list)
+    edge_ids: List[str] = Field(default_factory=list)
+    expanded_terms: List[str] = Field(default_factory=list)
+    reasoning_lenses: List[str] = Field(default_factory=list)
+    tacit_context: List[str] = Field(default_factory=list)
+    search_routing: List[str] = Field(default_factory=list)
+
+
 class BuildOntologyPreviewRequest(BaseModel):
     persona_id: Optional[int] = None
     query: Optional[str] = None
@@ -216,6 +229,7 @@ class BuildPaperOntologyRequest(BaseModel):
     project_end_product: Optional[str] = None
     project_target_host: Optional[str] = None
     persist: bool = True
+    extraction_mode: Literal["deterministic", "enriched"] = "deterministic"
 
 
 class OntologyPreviewResponse(BaseModel):
@@ -771,6 +785,9 @@ class ProjectJourneyResponse(BaseModel):
 
 
 class ResearchFinding(BaseModel):
+    pdf_reader: Optional[Dict[str, str]] = None
+    annotations: List[Dict[str, Any]] = Field(default_factory=list)
+    structured_notes: Dict[str, List[str]] = Field(default_factory=dict)
     id: str
     citation: str = ""
     labels: List[str] = Field(default_factory=list)
@@ -930,6 +947,7 @@ class FetchProjectLiteratureResponse(BaseModel):
     processing_summary: str = ""
     elicitation_questions: List[str] = Field(default_factory=list)
     workflow_trace: List[WorkflowStageTrace] = Field(default_factory=list)
+    ontology_trace: Optional[OntologyUsageTrace] = None
 
 
 class PaperPassageElicitationPrompt(BaseModel):
@@ -942,6 +960,11 @@ class PaperPassageElicitationPrompt(BaseModel):
 
 
 class PaperAnnotation(BaseModel):
+    source_block_id: Optional[str] = None
+    passage_labels: List[str] = Field(default_factory=list)
+    passage_id: Optional[str] = None
+    source_sha256: Optional[str] = None
+    evidence_kind: Literal["pdf_passage", "unverified"] = "unverified"
     page: int
     snippet: str
     reason: str

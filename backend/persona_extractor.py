@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 from models import PersonaPayload
+from database import db
 from ollama_client import ollama
 
 PERSONA_ROOT = Path(os.getenv("PERSONA_ROOT", "data/personas"))
@@ -76,7 +77,16 @@ async def _extract_fragment(scope_id: str, persona_name: str, chunk: str, chunk_
         f"{chunk}\n\n"
         "Return JSON only."
     )
-    return await ollama.generate_json(prompt, max_retries=2)
+    return await ollama.generate_json_cached(
+        cache=db,
+        task_type="persona_fragment_extraction",
+        prompt=prompt,
+        cache_version=1,
+        cache_inputs={"scope_id": scope_id, "chunk_index": chunk_index},
+        max_retries=2,
+        temperature=0.7,
+        top_p=0.9,
+    )
 
 
 async def _merge_fragments(scope_id: str, persona_name: str, fragments: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -92,7 +102,16 @@ async def _merge_fragments(scope_id: str, persona_name: str, fragments: List[Dic
         f"{json.dumps(fragments)}\n\n"
         "Return JSON only."
     )
-    return await ollama.generate_json(prompt, max_retries=2)
+    return await ollama.generate_json_cached(
+        cache=db,
+        task_type="persona_fragment_merge",
+        prompt=prompt,
+        cache_version=1,
+        cache_inputs={"scope_id": scope_id, "fragment_count": len(fragments)},
+        max_retries=2,
+        temperature=0.7,
+        top_p=0.9,
+    )
 
 
 def build_persona_summary(persona: PersonaPayload) -> str:

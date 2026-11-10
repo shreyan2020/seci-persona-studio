@@ -416,8 +416,16 @@ async def _fallback_tool_enrichment(project: dict, request: StartProjectExecutio
     )
 
 
-async def _run_json_stage(prompt: str) -> Dict[str, Any]:
-    return await ollama.generate_json(prompt, max_retries=2, temperature=0.2, top_p=0.9)
+async def _run_json_stage(prompt: str, task_type: str) -> Dict[str, Any]:
+    return await ollama.generate_json_cached(
+        cache=db,
+        task_type=task_type,
+        prompt=prompt,
+        cache_version=1,
+        max_retries=2,
+        temperature=0.2,
+        top_p=0.9,
+    )
 
 
 async def _derive_tool_enrichment(project: dict, persona: dict, request: StartProjectExecutionRequest, work_template: ResearchWorkTemplate) -> ToolEnrichmentArtifact:
@@ -499,7 +507,7 @@ Return ONLY valid JSON:
   "tool_queries": ["string"]
 }}
 """
-        payload = await _run_json_stage(synthesis_prompt)
+        payload = await _run_json_stage(synthesis_prompt, "execution_tool_synthesis")
         return ToolEnrichmentArtifact.model_validate(payload)
     except Exception:
         return await _fallback_tool_enrichment(project, request, work_template)
@@ -520,7 +528,7 @@ Return ONLY valid JSON:
 }}
 """
     try:
-        return ScopeArtifact.model_validate(await _run_json_stage(prompt))
+        return ScopeArtifact.model_validate(await _run_json_stage(prompt, "execution_scope"))
     except Exception:
         return _fallback_scope(project, request, work_template)
 
@@ -552,7 +560,7 @@ Return ONLY valid JSON:
 }}
 """
     try:
-        return EvidenceArtifact.model_validate(await _run_json_stage(prompt))
+        return EvidenceArtifact.model_validate(await _run_json_stage(prompt, "execution_evidence"))
     except Exception:
         return _fallback_evidence(work_template)
 
@@ -596,7 +604,7 @@ Return ONLY valid JSON:
 }}
 """
     try:
-        return ValidationArtifact.model_validate(await _run_json_stage(prompt))
+        return ValidationArtifact.model_validate(await _run_json_stage(prompt, "execution_validation"))
     except Exception:
         return _fallback_validation(work_template)
 
@@ -641,7 +649,7 @@ Return ONLY valid JSON:
 }}
 """
     try:
-        return ProposalArtifact.model_validate(await _run_json_stage(prompt))
+        return ProposalArtifact.model_validate(await _run_json_stage(prompt, "execution_proposals"))
     except Exception:
         return _fallback_proposals(project, request, work_template)
 
@@ -913,7 +921,15 @@ async def _generate_final_plan(project: dict, persona: dict, request: StartProje
         work_template_summary=_work_template_summary(final_template),
     )
     try:
-        response_data = await ollama.generate_json(prompt, max_retries=2, temperature=0.2, top_p=0.9)
+        response_data = await ollama.generate_json_cached(
+            cache=db,
+            task_type="execution_final_plan",
+            prompt=prompt,
+            cache_version=1,
+            max_retries=2,
+            temperature=0.2,
+            top_p=0.9,
+        )
         raw_plan = response_data.get("plan") if isinstance(response_data, dict) else None
         if raw_plan is None:
             raw_plan = response_data

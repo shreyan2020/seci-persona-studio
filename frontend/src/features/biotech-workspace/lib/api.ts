@@ -1,9 +1,8 @@
+import type { ResearchBoard, BoardOperation } from '../board-types';
 import type {
   CreateProjectResponse,
-  CreateProjectCollaboratorResponse,
   FetchProjectLiteratureResponse,
   GeneratePlanResponse,
-  InferWorkspaceMemoryResponse,
   ObjectiveClustersResponse,
   OntologyPreviewResponse,
   PreparePaperPdfResponse,
@@ -204,31 +203,6 @@ export async function runValidationTrack(
   return response.json();
 }
 
-export async function createProjectCollaborator(
-  projectId: number,
-  payload: {
-    name: string;
-    role?: string;
-    workflow_stage?: string;
-    focus_area?: string;
-    goals?: string[];
-    workflow_focus?: string[];
-    starter_questions?: string[];
-    summary?: string;
-  }
-): Promise<CreateProjectCollaboratorResponse> {
-  const response = await fetch(`${API_BASE}/api/projects/${projectId}/collaborators`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.detail || 'Failed to create project collaborator');
-  }
-  return response.json();
-}
-
 export async function fetchProjectQueries(projectId: number): Promise<ProjectQuerySessionListResponse> {
   const response = await fetch(`${API_BASE}/api/projects/${projectId}/queries`, { cache: 'no-store' });
   if (!response.ok) throw new Error('Failed to load project queries');
@@ -340,24 +314,6 @@ export async function saveWorkspaceMemory(
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
     throw new Error(err.detail || 'Failed to save workspace memory');
-  }
-  return response.json();
-}
-
-export async function inferWorkspaceMemory(payload: {
-  workspace_key: string;
-  scope: string;
-  explicit_state: Record<string, unknown>;
-  existing_tacit_state: TacitMemoryItem[];
-}): Promise<InferWorkspaceMemoryResponse> {
-  const response = await fetch(`${API_BASE}/api/workspace-memory/infer`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.detail || 'Failed to infer workspace memory');
   }
   return response.json();
 }
@@ -498,8 +454,8 @@ export async function fetchLatestExecutionRun(projectId: number, personaId: numb
   return response.json();
 }
 
-export async function fetchExecutionRun(projectId: number, runId: number): Promise<ProjectExecutionRunResponse> {
-  const response = await fetch(`${API_BASE}/api/projects/${projectId}/execution-runs/${runId}`, { cache: 'no-store' });
+export async function fetchExecutionRun(projectId: number, runId: number, signal?: AbortSignal): Promise<ProjectExecutionRunResponse> {
+  const response = await fetch(`${API_BASE}/api/projects/${projectId}/execution-runs/${runId}`, { cache: 'no-store', signal });
   if (!response.ok) throw new Error('Failed to load execution run');
   return response.json();
 }
@@ -551,6 +507,24 @@ export async function saveWorkspaceState(
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
     throw new Error(err.detail || 'Failed to save workspace');
+  }
+  return response.json();
+}
+
+
+export async function fetchResearchBoard(workspaceKey: string): Promise<{ board: ResearchBoard | null }> {
+  const response = await fetch(`${API_BASE}/api/research-board?workspace_key=${encodeURIComponent(workspaceKey)}`, { cache: 'no-store' });
+  if (!response.ok) throw new Error('Could not load the research board');
+  return response.json();
+}
+
+export async function mutateResearchBoard(operation: BoardOperation, payload: Record<string, unknown>): Promise<{ board: ResearchBoard }> {
+  const response = await fetch(`${API_BASE}/api/research-board/${operation}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(typeof error.detail === 'string' ? error.detail : 'The board could not be updated. Reload and try again.');
   }
   return response.json();
 }

@@ -15,6 +15,8 @@ import httpx
 from models import FetchProjectLiteratureRequest, ResearchFinding, WorkflowStageTrace
 from ollama_client import ollama
 from research_tools import (
+    _literature_relevance_profile,
+    _literature_relevance_score,
     _merge_record,
     _record_key,
     _unique_in_order,
@@ -610,14 +612,77 @@ def _record_source_ids(record: Dict[str, Any]) -> Dict[str, str]:
     }
 
 
-def _candidate_payload(records: List[Dict[str, Any]], limit: int = 36) -> Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]]]:
+def _record_grounded_knowns(record: Dict[str, Any], proposed: Any, limit: int = 6) -> List[str]:
+    source_text = " ".join(
+        str(record.get(key) or "") for key in ("title", "abstract", "citation")
+    )
+    normalized_source = re.sub(r"\s+", " ", source_text).lower().replace(",", ".")
+    grounded: List[str] = []
+    for value in proposed if isinstance(proposed, list) else []:
+        claim = re.sub(r"\s+", " ", str(value or "")).strip()
+        if not claim:
+            continue
+        numbers = re.findall(r"\d+(?:[.,]\d+)?", claim)
+        if any(number.replace(",", ".") not in normalized_source for number in numbers):
+            continue
+        technical = {
+            token
+            for token in re.findall(r"[a-z0-9-]+", claim.lower())
+            if len(token) >= 5 and token not in {"which", "using", "production", "increase", "increased", "strain"}
+        }
+        overlap = sum(token in normalized_source for token in technical)
+        if technical and overlap / len(technical) < 0.45:
+            continue
+        grounded.append(claim)
+
+    if grounded:
+        return _unique_in_order(grounded)[:limit]
+
+    sentences = re.split(r"(?<=[.!?])\s+", str(record.get("abstract") or ""))
+    relevant = [
+        re.sub(r"\s+", " ", sentence).strip()[:700]
+        for sentence in sentences
+        if len(sentence.strip()) >= 45
+        and re.search(r"naringenin|saccharomyces|glucose|titer|yield|engineer", sentence, re.IGNORECASE)
+    ]
+    if relevant:
+        return _unique_in_order(relevant)[:limit]
+    title = str(record.get("title") or "").strip()
+    return [f"This record reports: {title}."] if title else []
+
+
+def _record_grounded_labels(record: Dict[str, Any], proposed: Any) -> List[str]:
+    source_text = " ".join(str(record.get(key) or "") for key in ("title", "abstract")).lower()
+    labels = []
+    for value in proposed if isinstance(proposed, list) else []:
+        label = str(value or "").strip()
+        tokens = [token for token in re.findall(r"[a-z0-9-]+", label.lower()) if len(token) >= 3]
+        if label and tokens and all(token in source_text for token in tokens):
+            labels.append(label)
+    return _unique_in_order(labels)
+
+
+def _candidate_payload(
+    records: List[Dict[str, Any]],
+    *,
+    relevance_profile: Optional[Dict[str, Any]] = None,
+    limit: int = 24,
+) -> Tuple[List[Dict[str, Any]], Dict[str, Dict[str, Any]]]:
     candidates = []
     by_id: Dict[str, Dict[str, Any]] = {}
     has_dense_scores = any(isinstance(record.get("dense_similarity"), (int, float)) for record in records)
+    scored_records = []
+    for record in records:
+        item = dict(record)
+        relevance = _literature_relevance_score(item, relevance_profile or {})
+        item["deterministic_relevance"] = relevance["score"]
+        item["matched_query_terms"] = relevance["matched_terms"]
+        scored_records.append(item)
     sorted_records = sorted(
-        records,
+        scored_records,
         key=lambda item: (
             -float(item.get("dense_similarity") or 0.0) if has_dense_scores else 0.0,
+            -float(item.get("deterministic_relevance") or 0.0),
             -int(item.get("cited_by_count") or 0),
             -(int(item.get("year") or 0) if str(item.get("year") or "").isdigit() else 0),
             0 if item.get("abstract") else 1,
@@ -637,6 +702,8 @@ def _candidate_payload(records: List[Dict[str, Any]], limit: int = 36) -> Tuple[
                 "source_ids": _record_source_ids(record),
                 "cited_by_count": record.get("cited_by_count"),
                 "dense_similarity": record.get("dense_similarity"),
+                "deterministic_relevance": record.get("deterministic_relevance"),
+                "matched_query_terms": record.get("matched_query_terms") or [],
                 "abstract_excerpt": str(record.get("abstract") or "")[:1400],
                 "retrieval_queries": record.get("retrieval_queries") or [],
                 "citation_graph_relation": record.get("citation_graph_relation") or "",
@@ -656,7 +723,14 @@ async def _strict_llm_rerank_and_extract(
     max_results: int,
 ) -> Dict[str, Any]:
     stage = "llm_rerank_and_evidence_extraction"
-    candidates, by_id = _candidate_payload(records)
+    relevance_profile = _literature_relevance_profile(
+        request.query,
+        project_goal=request.project_goal or project.get("project_goal") or "",
+        objective_title=request.objective_title or "",
+        objective_definition=request.objective_definition or "",
+        objective_signals=request.objective_signals,
+    )
+    candidates, by_id = _candidate_payload(records, relevance_profile=relevance_profile)
     index = logger.start(stage, inputs={"candidate_count": len(candidates), "max_results": max_results})
     if not candidates:
         exc = ValueError("no candidates available for reranking")
@@ -687,6 +761,9 @@ Candidates:
 {json.dumps(candidates, ensure_ascii=False, indent=2)}
 
 Select up to {max_results} papers. Use only the candidate metadata; do not invent paper findings.
+Treat exact product, host, substrate, experimental intervention, and quantitative outcome matches as hard priorities.
+Prefer direct experimental evidence over reviews or general methods. Exclude supplemental-file DOI records and clinical papers unless they uniquely answer the query.
+Use deterministic_relevance and matched_query_terms as reproducible ranking evidence; only override them when the candidate metadata gives a specific reason.
 For knowns, extract claims directly supported by title/abstract/citation metadata.
 For unknowns, state what the paper metadata does not resolve for this project, especially transferability, feasibility, organism/product match, quantitative benchmark uncertainty, or missing experimental conditions.
 Generate tacit information questions that ask the user for constraints, transferability judgments, feasibility limits, or priority calls needed after reading these papers.
@@ -730,19 +807,35 @@ Return JSON:
             continue
         seen.add(candidate_id)
         record = by_id[candidate_id]
-        score = item.get("score")
+        score = float(record.get("deterministic_relevance") or 0.0)
         evidence_role = str(item.get("evidence_role") or "").strip()
-        labels = [str(label).strip() for label in (item.get("labels") or []) if str(label).strip()]
+        title_tokens = set(re.findall(r"[a-z0-9]+", str(record.get("title") or "").lower()))
+        target_products = set(relevance_profile.get("target_product_terms") or [])
+        target_hosts = set(relevance_profile.get("target_host_terms") or [])
+        product_matches = not target_products or bool(target_products & title_tokens)
+        host_matches = not target_hosts or target_hosts.issubset(title_tokens)
+        context_mismatches = []
+        if not product_matches:
+            context_mismatches.append("target product")
+        if not host_matches:
+            context_mismatches.append("target host")
+        if context_mismatches:
+            evidence_role = "boundary_condition|transfer_evidence"
+        labels = _record_grounded_labels(record, item.get("labels"))
         labels.extend(str(source).strip() for source in (record.get("sources") or []) if str(source).strip())
         if evidence_role:
             labels.append(f"evidence role: {evidence_role}")
-        if isinstance(score, (int, float)):
-            labels.append(f"sota score: {float(score):.2f}")
+        labels.append(f"deterministic relevance: {score:.2f}")
         source_ids = _record_source_ids(record)
         for key, value in source_ids.items():
             labels.append(f"{key.upper()}: {value}")
-        knowns = [str(value).strip() for value in (item.get("knowns") or []) if str(value).strip()][:6]
+        knowns = _record_grounded_knowns(record, item.get("knowns"), limit=6)
         unknowns = [str(value).strip() for value in (item.get("unknowns") or []) if str(value).strip()][:6]
+        relevance = str(item.get("relevance") or item.get("rationale") or "").strip()[:1200]
+        if context_mismatches:
+            mismatch_text = " and ".join(context_mismatches)
+            unknowns.insert(0, f"Context mismatch: this paper does not match the requested {mismatch_text} in its title.")
+            relevance = f"Transfer evidence only ({mismatch_text} mismatch). {relevance}".strip()
         if not knowns:
             exc = ValueError(f"{candidate_id} was selected without any knowns")
             logger.fail(index, stage, "LLM selected a candidate without extractive knowns", exc)
@@ -753,7 +846,7 @@ Return JSON:
                 labels=_unique_in_order(labels)[:12],
                 knowns=knowns,
                 unknowns=unknowns,
-                relevance=str(item.get("relevance") or item.get("rationale") or "").strip()[:1200],
+                relevance=relevance,
                 source_ids=source_ids,
                 synthesis_memo=str(item.get("rationale") or "").strip()[:1000],
             )

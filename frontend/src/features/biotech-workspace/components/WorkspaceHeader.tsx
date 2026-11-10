@@ -40,7 +40,7 @@ export function WorkspaceHeader({
                   onClick={onOpenMemory}
                   className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-950 hover:bg-amber-100"
                 >
-                  Workspace Memory{memoryItemCount > 0 ? ` (${memoryItemCount})` : ''}
+                  Research Board / Memory{memoryItemCount > 0 ? ` (${memoryItemCount})` : ''}
                 </button>
               )}
               {journeyHref && (

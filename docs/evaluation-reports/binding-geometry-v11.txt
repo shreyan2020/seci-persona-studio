@@ -1,0 +1,89 @@
+# V11: explicit binding supervision was learned partially, but did not generalize
+
+10 November 2026. Server run completed and frozen. **The new loss teaches some field extraction, but the current representation does not reliably bind an outcome to its analysis population. Do not advance it to propagation.** This is a representation-stage result, not another ranking benchmark or a verdict on waves.
+
+## Read the original case first
+
+The unchanged PIK3CA reference describes a cohort of 123 patients, three PIK3CA-mutant patients, and amplification in two of those three. It also mentions an EGFR mutation in the remaining mutant patient. The model must distinguish the target amplification finding from that surrounding information.
+
+| Role in the target finding | Required value | Binding model, seed11 | Other binding seeds |
+|---|---|---|---|
+| Owner | mutation-positive patients | NULL | NULL in both |
+| Analysis denominator | three | 12, taken from 123 | 23 or123 |
+| Endpoint | PIK3CA amplification | PIK3CA mutations | EGFR mutation in both |
+
+Adding the geometry margin does not repair this: all three margin variants also lose the owner, substitute part or all of123 for three, and select a mutation endpoint. These are substantive ownership/endpoint errors. They are not merely punctuation or whitespace disagreements.
+
+There is a partial success. In the shorter faithful candidate sentence, all six binding/binding-margin runs recover **PIK3CA amplification** as the endpoint. They still fail to recover its complete owner/denominator association. The reference contains multiple findings and anaphora, so this diagnostic is harder than a single-target controlled unit even though the target is explicitly named. It is author-specified and previously exposed, not an independent expert test.
+
+[WORKED_EXAMPLE.md](WORKED_EXAMPLE.md) shows every candidate, every seed, decoded fields and links to actual role vectors. No best seed was selected.
+
+## What we implemented
+
+The input is a short finding record, not gold fields. Cached Qwen3-Embedding-8B provides frozen contextual token states. A learned projection and one bidirectional attention block locate six roles: population, parent cohort count, owner, analysis-group count, endpoint and result. Each role predicts a start/end span or NULL.
+
+The role value is pooled from **context-free token embeddings**, using the predicted soft span. A context representation concatenates population, owner and endpoint; numerical roles are separate. Pair classifiers see these predicted role vectors and NULL confidences, without gold spans or a separate pooled-text input.
+
+Three matched learned arms use the same architecture and data:
+
+- **Pair only:** context/faithfulness labels, without explicit span supervision.
+- **Binding:** those pair losses plus role start/end supervision.
+- **Binding + margin:** binding supervision plus the context-separation margin.
+
+Each uses seeds 11, 29, 47, up to 300 updates, with the same validation selection criterion. Three further controls use frozen sentence embeddings: reference+candidate, candidate only, and reference only. The base language model is not fine-tuned. No graph, wave operator, researcher clarification or causal-identification claim is tested.
+
+This remains a soft representation bottleneck. The classifier consumes soft span pools, whereas the readable field is decoded from a hard start/end choice. Good pair predictions therefore need not imply correct extracted bindings. A high NULL probability can coexist with a nonzero residual role vector, and cosine ignores NULL confidence. Nor does pooling guarantee preservation of internal word order or negation. These are limits of this implementation, not validated uncertainty or causal geometry.
+
+## Supervision and pre-fit review
+
+Two agents authored source anchors and a separate agent reviewed them against the supplied abstracts without split labels. From 36 source-only candidates, 28 anchors were accepted: **16 training, 4 validation, 8 held-out papers**. The papers came from previously exposed V9 abstracts and were unused in V10 annotation/fitting. They are not globally unseen scientific papers. Exact PMID/DOI/title duplicates were checked; broader study-family independence is not established. No benchmark relevance labels were read.
+
+The review corrected ownership descriptions, removed count/owner duplication from minimal fields, distinguished patients from samples, and preserved unknowns. Survival analysis-group sizes are not asserted to be verified risk-set denominators. Two ambiguous endpoint contrast types were excluded.
+
+The first proposed contrast sets failed semantic review. Deleting a field did not always remove its meaning elsewhere, and a generic comparison group did not necessarily identify a different owner. That construction is preserved in [attempt_01_ambiguous_worlds](attempt_01_ambiguous_worlds/attempt_receipt.json).
+
+The final **hypothetical** owner worlds use two explicitly distinct analysis identities, A and B, with the same reviewed membership description. Every record mentions both identities neutrally; its owner clause selects the relevant identity. Membership may overlap or coincide. Thus the supervised relation is exact **reported-analysis scope**, not an assertion that the biological populations are incompatible. Endpoint alternatives retain their reviewed measurement type. Unknown-owner references also omit the analysis count; unknown-endpoint references also omit the result.
+
+The same candidate appears with matching, changed and unresolved references. All 54 first-view context blocks across 28 sources passed the separate rendered-text audit after repair. Numerical blocks and other wording views are rule-constructed; they were not separately expert annotated. The annotations remain agent-reviewed silver.
+
+The final set has 1,038 pairs: 756 training, 96 validation, 186 held-out. Those are repeated derivatives of 28 papers, not 1,038 independent scientific cases. Wording templates are disjoint across training, validation and held sources. This jointly changes paper and wording, so failures cannot be attributed uniquely to either factor.
+
+## What the representations learned
+
+On the held set of 8 papers and 121 distinct controlled records, **every learned run has zero complete population–owner–analysis-count–endpoint tuples**. This was independently recomputed from normalized field strings; it does not depend on strict character-span scoring.
+
+Binding supervision improves some individual fields over pair-only training. Among explicitly present held fields, binding recovers approximately 40% of owner values, 22% of analysis counts and 12% of endpoints, averaged by paper and seed. However, errors combine to destroy the complete association. Every binding variant also predicts NULL for all 63 held records with an explicitly stated parent count.
+
+No binding or binding-margin seed solves a complete six-pair context block. A candidate-only control scores exactly one-third on the balanced context cases, as required by construction; the old candidate-wording shortcut is blocked for that marginal comparison. This does not eliminate every other shortcut. The frozen reference+candidate baseline solves some blocks, while the added margin establishes no benefit over binding supervision.
+
+The actual held-source cases appear in [REPRESENTATIONS.md](REPRESENTATIONS.md). Full counts, per-source results, controls and source-level intervals are in [evaluation/RESULTS_TABLES.md](evaluation/RESULTS_TABLES.md) and [evaluation/summary.json](evaluation/summary.json). Seeds and derived statements are not treated as independent studies. The conservative predicted-slot matcher intentionally never asserts a changed relation from an unmatched phrase, so its necessarily zero complete-block score is not evidence of extraction failure; the gold-slot oracle is only a construction check.
+
+## Diagnosis: learning versus transfer
+
+After scoring, we performed a separately recorded **read-only diagnosis of the selected frozen checkpoints** on training and validation inputs. No model was refitted or selected again.
+
+For binding supervision, complete ownership-tuple recovery on the training inputs is 50.5%, 49.1% and 64.2% across the three seeds. It is 0% on validation for all three, then 0% on the held sources. Pair-only checkpoints recover no complete training tuples. Thus explicit span supervision teaches part of the extraction task, but those bindings do not transfer reliably. The added margin produces essentially the same pattern. All binding variants select the first 30-update checkpoint; later training loss decreases while validation loss worsens.
+
+This supports concern about dependence on wording/order and insufficient generalization. It does not isolate template dependence from source vocabulary, model capacity, soft/hard decoding or the joint loss. Likewise, the decoder permits subword fragments such as12 from 123; atom boundaries need an explicit validity constraint. Correcting a malformed numeric fragment alone would not resolve choosing the wrong cohort.
+
+There is also a **process failure**: validation loss was used for checkpoint selection, but complete-binding accuracy was not enforced as a pre-test gate. The later diagnosis shows that such a gate would have stopped this version before opening the held sources. That test set is now exposed; it must not be repeatedly retuned against and called fresh.
+
+## Decision before another experiment
+
+Keep source review, transparent synthetic worlds, whole-paper splits, balanced same-candidate controls and exact decoded fields. Keep the finding that direct span supervision can change the learned behavior. Do not retain this trained binder as a reliable scientific representation.
+
+The next development stage should separate extraction from geometry learning. First establish that a binder can recover complete tuples on a tiny development set and preserve them under independently written paraphrases, reordered clauses and nearby distractor numbers. Treat field presence separately from span localization, constrain entity/number spans to valid atoms, and inspect hard decoded records. Only after a development gate passes should a frozen binder feed geometry training. Compare geometry learned from reviewed correct bindings as a separate control, so extraction failure cannot masquerade as failure of the geometry objective. These are prospective changes, not implemented successes in this run.
+
+The [next-stage gate](NEXT_STEP.md) requires checking complete bindings before any new held-source evaluation. Causal roles, transportability and propagation remain later, separately validated stages.
+
+## Execution, retained failures and verification
+
+Nine synthetic software checks and a constructed CPU fitting-to-evaluation smoke passed. The first scientific launch exported 669 frozen text representations and fitted the three linear probes, then failed on a 35-token population span exceeding the 32-token decoder cap. No neural checkpoint or held-out result had been produced. Original code, probes, logs and receipts are preserved in [attempt_02_span_limit](attempt_02_span_limit/run_receipt.json).
+
+The documented repair permits any contiguous span within the unchanged 384-token input limit, adds exhaustive development-target alignment preflight, and reruns all arms with the same source data/seeds/settings. The original 30-minute deadline remains in force. No source text was truncated; the longest actual input is118 tokens. All 2,713 non-null development targets round-trip to the intended normalized field. There are 1,796 tokenizer-boundary differences, so strict character-span scores are secondary boundary diagnostics, not the primary semantic measure.
+
+The failed parent process took 70.84 seconds. The repaired process completed in 379.07 seconds, including 359.05 seconds of fitting/probe selection; the subsequent frozen development diagnosis took 12.61 seconds. Child durations overlap parent totals and must not be added again. These are process wall times, not billed GPU-allocation hours or measured kernel utilization. Agent generation/review costs were not separately metered.
+
+Server and local integrity checks verified 4,464 probability decisions, 6,534 extracted fields, cosine calculations, source splits and frozen hashes. Independent agent review confirmed the substantive extraction failures. These checks do not turn agent labels into expert gold.
+
+All models, decisions, source review and attempts are retained locally and on the server. Bulk frozen token-state caches remain on the server under `/data/sticker-studio/dsm-research/binding_geometry_v11_20261110/embeddings/docs/`; local predictions contain the learned role/context vectors. The archive command warned that its root directory changed as the archive file was created; extraction paths and every frozen artifact hash were checked successfully after transfer.

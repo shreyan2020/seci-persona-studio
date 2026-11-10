@@ -11,7 +11,7 @@ const FRONTEND_PORT = Number(process.env.FRONTEND_PORT || 3000);
 const BACKEND_PORT = Number(process.env.BACKEND_PORT || 8000);
 const DEFAULT_RUNTIME_CONFIG = {
   ollamaBaseUrl: 'http://localhost:11434',
-  ollamaModel: 'qwen2.5:7b',
+  ollamaModel: 'qwen3.5:latest',
 };
 
 const PYTHON_IMPORT_CHECK = [

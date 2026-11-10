@@ -1,0 +1,746 @@
+{
+  "grounding_version": 2,
+  "comparison_rows": [],
+  "experiment_facts": [
+    {
+      "id": "fact_8d55c954ae8ce89b0756",
+      "evidence_id": "evidence_db5688c2bc98d1952175",
+      "dimension": "host",
+      "value": "JFYL122",
+      "anchors": [],
+      "intervention_type": "none",
+      "ontology_terms": [
+        {
+          "namespace": "BFO",
+          "term_id": "BFO:0000040",
+          "label": "material entity"
+        }
+      ],
+      "review": "confirmed"
+    },
+    {
+      "id": "fact_55bc3f45da633d352104",
+      "evidence_id": "evidence_db5688c2bc98d1952175",
+      "dimension": "cultivation",
+      "value": "1-­liter fed-­ batch bioreactors",
+      "anchors": [],
+      "intervention_type": "none",
+      "ontology_terms": [
+        {
+          "namespace": "OBI",
+          "term_id": "OBI:0000011",
+          "label": "planned process"
+        }
+      ],
+      "review": "confirmed"
+    },
+    {
+      "id": "fact_ba8e8b50558fabd0a9f9",
+      "evidence_id": "evidence_db5688c2bc98d1952175",
+      "dimension": "carbon_source",
+      "value": "glucose",
+      "anchors": [],
+      "intervention_type": "none",
+      "ontology_terms": [
+        {
+          "namespace": "BFO",
+          "term_id": "BFO:0000040",
+          "label": "material entity"
+        },
+        {
+          "namespace": "ChEBI",
+          "term_id": "CHEBI:17234",
+          "label": "glucose"
+        }
+      ],
+      "review": "confirmed"
+    },
+    {
+      "id": "fact_02b4dd0b77b491212eeb",
+      "evidence_id": "evidence_db5688c2bc98d1952175",
+      "dimension": "titer",
+      "value": "17.1 g/liter",
+      "anchors": [],
+      "intervention_type": "none",
+      "ontology_terms": [],
+      "review": "confirmed"
+    },
+    {
+      "id": "fact_18d88bdf7e7fbb37a28f",
+      "evidence_id": "evidence_db5688c2bc98d1952175",
+      "dimension": "limitation",
+      "value": "nitrogen likely became limiting at day 3",
+      "anchors": [],
+      "intervention_type": "none",
+      "ontology_terms": [],
+      "review": "confirmed"
+    },
+    {
+      "id": "fact_e154d06642a403a261b8",
+      "evidence_id": "evidence_02d948a602069ce47b29",
+      "dimension": "cultivation",
+      "value": "1-­liter fed-­batch cultivation",
+      "anchors": [],
+      "intervention_type": "none",
+      "ontology_terms": [
+        {
+          "namespace": "OBI",
+          "term_id": "OBI:0000011",
+          "label": "planned process"
+        }
+      ],
+      "review": "confirmed"
+    },
+    {
+      "id": "fact_77ad4c4be86dbc99eb3e",
+      "evidence_id": "evidence_02d948a602069ce47b29",
+      "dimension": "intervention",
+      "value": "The pH was controlled at 5.5",
+      "anchors": [],
+      "intervention_type": "process",
+      "ontology_terms": [
+        {
+          "namespace": "OBI",
+          "term_id": "OBI:0000011",
+          "label": "planned process"
+        }
+      ],
+      "review": "confirmed"
+    },
+    {
+      "id": "fact_670ee7f57ef15b8eb4bc",
+      "evidence_id": "evidence_02d948a602069ce47b29",
+      "dimension": "carbon_source",
+      "value": "glucose (600 g/liter)",
+      "anchors": [],
+      "intervention_type": "none",
+      "ontology_terms": [
+        {
+          "namespace": "BFO",
+          "term_id": "BFO:0000040",
+          "label": "material entity"
+        },
+        {
+          "namespace": "ChEBI",
+          "term_id": "CHEBI:17234",
+          "label": "glucose"
+        }
+      ],
+      "review": "confirmed"
+    },
+    {
+      "id": "fact_bebc600fd8fd608a91ea",
+      "evidence_id": "evidence_02d948a602069ce47b29",
+      "dimension": "titer",
+      "value": "130.5 g/ liter IA",
+      "anchors": [],
+      "intervention_type": "none",
+      "ontology_terms": [],
+      "review": "confirmed"
+    },
+    {
+      "id": "fact_129ee510494ac4753522",
+      "evidence_id": "evidence_02d948a602069ce47b29",
+      "dimension": "yield",
+      "value": "0.320 mol/mol glucose",
+      "anchors": [],
+      "intervention_type": "none",
+      "ontology_terms": [],
+      "review": "confirmed"
+    },
+    {
+      "id": "fact_0a80ad6788253fcce6ea",
+      "evidence_id": "evidence_91c1630e6cd610cb4abe",
+      "dimension": "host",
+      "value": "JFYL122",
+      "anchors": [],
+      "intervention_type": "none",
+      "ontology_terms": [
+        {
+          "namespace": "BFO",
+          "term_id": "BFO:0000040",
+          "label": "material entity"
+        }
+      ],
+      "review": "confirmed"
+    },
+    {
+      "id": "fact_9861326246295f121d91",
+      "evidence_id": "evidence_91c1630e6cd610cb4abe",
+      "dimension": "cultivation",
+      "value": "50-­liter bioreactor",
+      "anchors": [],
+      "intervention_type": "none",
+      "ontology_terms": [
+        {
+          "namespace": "OBI",
+          "term_id": "OBI:0000011",
+          "label": "planned process"
+        }
+      ],
+      "review": "confirmed"
+    },
+    {
+      "id": "fact_9d7dc82c6f2cd108610f",
+      "evidence_id": "evidence_91c1630e6cd610cb4abe",
+      "dimension": "titer",
+      "value": "94.1 g/liter IA",
+      "anchors": [],
+      "intervention_type": "none",
+      "ontology_terms": [],
+      "review": "confirmed"
+    },
+    {
+      "id": "fact_b0599eafc5799982f92f",
+      "evidence_id": "evidence_91c1630e6cd610cb4abe",
+      "dimension": "productivity",
+      "value": "0.238 g/liter per hour",
+      "anchors": [],
+      "intervention_type": "none",
+      "ontology_terms": [],
+      "review": "confirmed"
+    },
+    {
+      "id": "fact_3dc90069a6da482771e9",
+      "evidence_id": "evidence_91c1630e6cd610cb4abe",
+      "dimension": "yield",
+      "value": "0.36 mol/mol glucose",
+      "anchors": [],
+      "intervention_type": "none",
+      "ontology_terms": [],
+      "review": "confirmed"
+    },
+    {
+      "id": "fact_7ee9ee0e38b45e6b1c4e",
+      "evidence_id": "evidence_91c1630e6cd610cb4abe",
+      "dimension": "limitation",
+      "value": "accidental glucose limitation between days 8 and 9",
+      "anchors": [],
+      "intervention_type": "none",
+      "ontology_terms": [],
+      "review": "confirmed"
+    },
+    {
+      "id": "fact_a775b4d8359b57ddcf64",
+      "evidence_id": "evidence_cb6a9febd58340cf4bfe",
+      "dimension": "host",
+      "value": "YM4B493",
+      "anchors": [],
+      "intervention_type": "none",
+      "ontology_terms": [
+        {
+          "namespace": "BFO",
+          "term_id": "BFO:0000040",
+          "label": "material entity"
+        }
+      ],
+      "review": "confirmed"
+    },
+    {
+      "id": "fact_f2747997228f053d1da8",
+      "evidence_id": "evidence_cb6a9febd58340cf4bfe",
+      "dimension": "intervention",
+      "value": "deletions of both YlYHM2 and YlCEX1",
+      "anchors": [],
+      "intervention_type": "genetic",
+      "ontology_terms": [
+        {
+          "namespace": "OBI",
+          "term_id": "OBI:0000011",
+          "label": "planned process"
+        }
+      ],
+      "review": "confirmed"
+    },
+    {
+      "id": "fact_62088ecac274dbfa30c1",
+      "evidence_id": "evidence_cb6a9febd58340cf4bfe",
+      "dimension": "comparator",
+      "value": "parental strain YM4B324",
+      "anchors": [],
+      "intervention_type": "none",
+      "ontology_terms": [],
+      "review": "confirmed"
+    },
+    {
+      "id": "fact_eea1b39de9c31d755d5f",
+      "evidence_id": "evidence_cb6a9febd58340cf4bfe",
+      "dimension": "titer",
+      "value": "19.66 ± 0.36 g/L",
+      "anchors": [],
+      "intervention_type": "none",
+      "ontology_terms": [],
+      "review": "confirmed"
+    },
+    {
+      "id": "fact_6c9e8fe93547951b72d3",
+      "evidence_id": "evidence_cb6a9febd58340cf4bfe",
+      "dimension": "yield",
+      "value": "0.303 ± 0.006 mol/mol",
+      "anchors": [],
+      "intervention_type": "none",
+      "ontology_terms": [],
+      "review": "confirmed"
+    },
+    {
+      "id": "fact_d86e2032e2a106b45611",
+      "evidence_id": "evidence_02245b224fbfa88c97d7",
+      "dimension": "host",
+      "value": "YM4B493",
+      "anchors": [],
+      "intervention_type": "none",
+      "ontology_terms": [
+        {
+          "namespace": "BFO",
+          "term_id": "BFO:0000040",
+          "label": "material entity"
+        }
+      ],
+      "review": "confirmed"
+    },
+    {
+      "id": "fact_27d4d258318085c980da",
+      "evidence_id": "evidence_02245b224fbfa88c97d7",
+      "dimension": "carbon_source",
+      "value": "glucose",
+      "anchors": [],
+      "intervention_type": "none",
+      "ontology_terms": [
+        {
+          "namespace": "BFO",
+          "term_id": "BFO:0000040",
+          "label": "material entity"
+        },
+        {
+          "namespace": "ChEBI",
+          "term_id": "CHEBI:17234",
+          "label": "glucose"
+        }
+      ],
+      "review": "confirmed"
+    },
+    {
+      "id": "fact_e053256e8c942af665ce",
+      "evidence_id": "evidence_02245b224fbfa88c97d7",
+      "dimension": "cultivation",
+      "value": "pulse-feeding",
+      "anchors": [],
+      "intervention_type": "none",
+      "ontology_terms": [
+        {
+          "namespace": "OBI",
+          "term_id": "OBI:0000011",
+          "label": "planned process"
+        }
+      ],
+      "review": "confirmed"
+    },
+    {
+      "id": "fact_bab2b727d2acdf179370",
+      "evidence_id": "evidence_02245b224fbfa88c97d7",
+      "dimension": "titer",
+      "value": "55.08 g/L with glucose",
+      "anchors": [],
+      "intervention_type": "none",
+      "ontology_terms": [],
+      "review": "confirmed"
+    },
+    {
+      "id": "fact_6b032364dc0eed0f445c",
+      "evidence_id": "evidence_02245b224fbfa88c97d7",
+      "dimension": "yield",
+      "value": "0.343 mol/mol",
+      "anchors": [],
+      "intervention_type": "none",
+      "ontology_terms": [],
+      "review": "confirmed"
+    },
+    {
+      "id": "fact_0ed5e5bbfe95a2da0792",
+      "evidence_id": "evidence_02245b224fbfa88c97d7",
+      "dimension": "carbon_source",
+      "value": "glycerol",
+      "anchors": [],
+      "intervention_type": "none",
+      "ontology_terms": [
+        {
+          "namespace": "BFO",
+          "term_id": "BFO:0000040",
+          "label": "material entity"
+        },
+        {
+          "namespace": "ChEBI",
+          "term_id": "CHEBI:17754",
+          "label": "glycerol"
+        }
+      ],
+      "review": "confirmed"
+    },
+    {
+      "id": "fact_0d6c378d205ab6323326",
+      "evidence_id": "evidence_02245b224fbfa88c97d7",
+      "dimension": "titer",
+      "value": "37.71 g/L with glycerol",
+      "anchors": [],
+      "intervention_type": "none",
+      "ontology_terms": [],
+      "review": "confirmed"
+    },
+    {
+      "id": "fact_fb7d76c31bea8aa1c7e2",
+      "evidence_id": "evidence_02245b224fbfa88c97d7",
+      "dimension": "yield",
+      "value": "0.134 mol/mol",
+      "anchors": [],
+      "intervention_type": "none",
+      "ontology_terms": [],
+      "review": "confirmed"
+    }
+  ],
+  "experiment_records": [
+    {
+      "id": "experiment_audit_0b4b6c7c1e71554c01e0",
+      "title": "Fu 2024 · 1 L · nitrogen depletion",
+      "category": "cultivation",
+      "fact_ids": [
+        "fact_8d55c954ae8ce89b0756",
+        "fact_55bc3f45da633d352104",
+        "fact_ba8e8b50558fabd0a9f9",
+        "fact_02b4dd0b77b491212eeb",
+        "fact_18d88bdf7e7fbb37a28f"
+      ],
+      "evidence_refs": [
+        "evidence_db5688c2bc98d1952175"
+      ],
+      "link_anchors": [],
+      "link_status": "single_passage",
+      "important_differences": []
+    },
+    {
+      "id": "experiment_audit_1c7768f95d8babcc7bc3",
+      "title": "Fu 2024 · 1 L · optimized feeding and pH",
+      "category": "cultivation",
+      "fact_ids": [
+        "fact_e154d06642a403a261b8",
+        "fact_77ad4c4be86dbc99eb3e",
+        "fact_670ee7f57ef15b8eb4bc",
+        "fact_bebc600fd8fd608a91ea",
+        "fact_129ee510494ac4753522"
+      ],
+      "evidence_refs": [
+        "evidence_02d948a602069ce47b29"
+      ],
+      "link_anchors": [],
+      "link_status": "single_passage",
+      "important_differences": []
+    },
+    {
+      "id": "experiment_audit_f9e33371c1591ba95e0e",
+      "title": "Fu 2024 · 50 L scale-up",
+      "category": "cultivation",
+      "fact_ids": [
+        "fact_0a80ad6788253fcce6ea",
+        "fact_9861326246295f121d91",
+        "fact_9d7dc82c6f2cd108610f",
+        "fact_b0599eafc5799982f92f",
+        "fact_3dc90069a6da482771e9",
+        "fact_7ee9ee0e38b45e6b1c4e"
+      ],
+      "evidence_refs": [
+        "evidence_91c1630e6cd610cb4abe"
+      ],
+      "link_anchors": [],
+      "link_status": "single_passage",
+      "important_differences": []
+    },
+    {
+      "id": "experiment_audit_defc3d0a429df634b3b4",
+      "title": "Ciliberti 2025 · combined pathways · flask result",
+      "category": "pathway",
+      "fact_ids": [
+        "fact_a775b4d8359b57ddcf64",
+        "fact_f2747997228f053d1da8",
+        "fact_62088ecac274dbfa30c1",
+        "fact_eea1b39de9c31d755d5f",
+        "fact_6c9e8fe93547951b72d3"
+      ],
+      "evidence_refs": [
+        "evidence_cb6a9febd58340cf4bfe"
+      ],
+      "link_anchors": [],
+      "link_status": "single_passage",
+      "important_differences": []
+    },
+    {
+      "id": "experiment_audit_af4eed3b03621aae4a83",
+      "title": "Ciliberti 2025 · glucose bioreactor",
+      "category": "cultivation",
+      "fact_ids": [
+        "fact_d86e2032e2a106b45611",
+        "fact_27d4d258318085c980da",
+        "fact_e053256e8c942af665ce",
+        "fact_bab2b727d2acdf179370",
+        "fact_6b032364dc0eed0f445c"
+      ],
+      "evidence_refs": [
+        "evidence_02245b224fbfa88c97d7"
+      ],
+      "link_anchors": [],
+      "link_status": "single_passage",
+      "important_differences": []
+    },
+    {
+      "id": "experiment_audit_b07bf54c3775ccb03782",
+      "title": "Ciliberti 2025 · glycerol bioreactor",
+      "category": "cultivation",
+      "fact_ids": [
+        "fact_d86e2032e2a106b45611",
+        "fact_0ed5e5bbfe95a2da0792",
+        "fact_e053256e8c942af665ce",
+        "fact_0d6c378d205ab6323326",
+        "fact_fb7d76c31bea8aa1c7e2"
+      ],
+      "evidence_refs": [
+        "evidence_02245b224fbfa88c97d7"
+      ],
+      "link_anchors": [],
+      "link_status": "single_passage",
+      "important_differences": []
+    }
+  ],
+  "comparison_judgments": [],
+  "comparison_warnings": [
+    "Source-audited selections replace the incomplete automatic extraction for this walkthrough. Machine outputs are retained in artifacts/itaconate-workflow.",
+    "Fu 2024 abstract and results report different final titers. Values shown use Results pp. 7–9.",
+    "Automatic agent alternatives were unavailable in this run; no agent recommendations or local laboratory experience were fabricated."
+  ],
+  "comparison_project": {},
+  "comparison_sources": [],
+  "workspace_key": "example-itaconate",
+  "decision_key": "decision_61893ec3aa275ed23c5d",
+  "query": "For glucose-based itaconic acid production in Yarrowia lipolytica, should our first experiment modify the production pathway or change cultivation conditions? Compare evidence from multiple experimental papers, distinguish shake-flask results from controlled-bioreactor results, and identify which choices depend on our local experience.",
+  "revision": 4,
+  "round": 1,
+  "evidence": [
+    {
+      "id": "evidence_f6ba7125f2d1f6b25321",
+      "source_id": "paper_44d2c17c59b82fbbfaaa",
+      "citation": "Reprogramming Yarrowia lipolytica metabolism for efficient synthesis of itaconic acid from flask to semipilot scale. Science Advances. 2024.",
+      "page": 3,
+      "quote": "To test whether the earlier cis-­aconitate enhancing strategy (Fig. 2E) could increase IA production, we introduced a codon optimized A. terreus CAD gene in the promising strains in step 1. Blocking lipid accumulation increased IA production from 0.027 to 0.049 g/liter (JFYL013), while blocking the glyoxylate cycle increased production of IA to 0.126 g/liter (Fig. 3A). The codeletion of ICL1/2 and IDP resulted in the highest IA accumulation of 0.184 g/liter in JFYL033, which is consistent with their enhanced cis-­aconitate accumulation (Fig. 2E). Because several reports showed that subcellular localization of metabolic pathways can efficiently increase product conversion (47–50), CAD was targeted to the mitochondria by fusing it with the mitochondrial leading sequence of the cytochrome c oxidase subunit 4 (cox4).",
+      "source_sha256": "0d3aee0f7f7d354a60f7e4e0cd5847db2367b48f3e7df28ba5b8565078235ff4"
+    },
+    {
+      "id": "evidence_2dd194bba0fbb54bda06",
+      "source_id": "paper_44d2c17c59b82fbbfaaa",
+      "citation": "Reprogramming Yarrowia lipolytica metabolism for efficient synthesis of itaconic acid from flask to semipilot scale. Science Advances. 2024.",
+      "page": 3,
+      "quote": "The AtMTT transporter from A. terreus under pTef1 promoter resulted in 0.527 g/liter (JFYL014, Fig. 3B) and showed a decreased IA titer with pTefintron promoter (JFYL036), suggesting that extremely high expression of AtMTT is not beneficial for IA production. Expressing MTTs from Aspergillus kawachii (AkCTP) and U. maydis (UmMTT1) under pTef1 resulted in decreased IA titers (Fig. 3B) compared to JFYL014. On the other hand, pTefintron yielded ca. five times higher IA production, suggesting that these two transporters have low activity. As for MDT transporters, none of the candidates, i.e., S. cerevisiae (SceDIC), Mus musculus (MumDIC), and Arabidopsis thaliana (AthDIC), increased IA production (Fig. 3C).",
+      "source_sha256": "0d3aee0f7f7d354a60f7e4e0cd5847db2367b48f3e7df28ba5b8565078235ff4"
+    },
+    {
+      "id": "evidence_d832c82eedd2d48946f5",
+      "source_id": "paper_44d2c17c59b82fbbfaaa",
+      "citation": "Reprogramming Yarrowia lipolytica metabolism for efficient synthesis of itaconic acid from flask to semipilot scale. Science Advances. 2024.",
+      "page": 5,
+      "quote": "The IA producer JFYL066 (JFYL007 with one copy number of AtCAD and AtMTT) produced similar IA titer in both the NR and NL conditions (Fig. 4A) when cultivated until glucose depleted (4 and 8 days, respectively). While titers were similar after glucose depletion, the NL condition resulted in higher IA yield but lower productivity, probably due to low biomass formation. It would therefore be convenient to mimic NL condition by imitating part of its regulation in NR conditions, to achieve both high yield (from NL) and productivity (from NR). NL increases the activity of adenosine monophosphate (AMP) deaminase (AMPD), which converts AMP into inosine monophosphate. IDH, as AMP-­dependent dehydrogenase, is inhibited by low AMP levels (53, 54).",
+      "source_sha256": "0d3aee0f7f7d354a60f7e4e0cd5847db2367b48f3e7df28ba5b8565078235ff4"
+    },
+    {
+      "id": "evidence_db5688c2bc98d1952175",
+      "source_id": "paper_44d2c17c59b82fbbfaaa",
+      "citation": "Reprogramming Yarrowia lipolytica metabolism for efficient synthesis of itaconic acid from flask to semipilot scale. Science Advances. 2024.",
+      "page": 7,
+      "quote": "The most promising strain (JFYL122) was cultivated in 1-­liter fed-­ batch bioreactors. We tested a widely used nitrogen control strategy (NR switch, NR -­> NL) in which high biomass is first generated under NR condition (C/N = 22), and NL conditions were then generated by nitrogen source consumption during biomass accumulation. Unexpectedly, large amounts of CA started to accumulate after 3 days (Fig. 6A), and surpassed the IA titer, with a final titer of 67.5 and 17.1 g/liter, respectively. The predominant CA accumulation (Fig. 6A) was possibly due to complex regulation where both absolute nitrogen amount and C/N ratio affect metabolism. While glucose was fed during the cultivation, nitrogen likely became limiting at day 3, when growth halted at optical density at 600 nm (OD600) 120. At this point, abundant CA started to be secreted, indicating that it was not being converted to cis-­aconitate. This result contrasts with what we measured before in deep-­well plates, where only ca. 1 g/liter CA was produced in NL condition (Fig. 4E).",
+      "source_sha256": "0d3aee0f7f7d354a60f7e4e0cd5847db2367b48f3e7df28ba5b8565078235ff4"
+    },
+    {
+      "id": "evidence_ef2739824fef25a294ed",
+      "source_id": "paper_44d2c17c59b82fbbfaaa",
+      "citation": "Reprogramming Yarrowia lipolytica metabolism for efficient synthesis of itaconic acid from flask to semipilot scale. Science Advances. 2024.",
+      "page": 9,
+      "quote": "Switching from pulsed to continuous feed increased IA production to 24.5 g/liter on the sixth day (Fig. 6E). However, afterwards, cells arrested glucose consumption and IA production. Cells growth and glucose consumption recovered when the pH was increased from 3.5 to 5.5, and IA production resumed (Fig. 6E). Testing IA tolerance in high-­ throughput microbioreactors (BioLector) with an initial pH of 3.5 showed that 20 g/liter IA interrupts cell growth (Fig. 6F), while it was reported that, at pH 7, Y. lipolytica is tolerant to 60 g/liter IA (34). Therefore, the addition of YE, continuous feeding, and pH of 5.5 were the key factors in later cultivations. These optimized conditions were combined in 1-­liter fed-­batch cultivation: The pH was controlled at 5.5, and glucose (600 g/liter) and YE (20 g/liter) were continuously fed.",
+      "source_sha256": "0d3aee0f7f7d354a60f7e4e0cd5847db2367b48f3e7df28ba5b8565078235ff4"
+    },
+    {
+      "id": "evidence_02d948a602069ce47b29",
+      "source_id": "paper_44d2c17c59b82fbbfaaa",
+      "citation": "Reprogramming Yarrowia lipolytica metabolism for efficient synthesis of itaconic acid from flask to semipilot scale. Science Advances. 2024.",
+      "page": 9,
+      "quote": "These optimized conditions were combined in 1-­liter fed-­batch cultivation: The pH was controlled at 5.5, and glucose (600 g/liter) and YE (20 g/liter) were continuously fed. No growth disruption was observed when IA titer exceeded 25 g/liter (Fig. 6G). Higher IA production was observed under PL and SL than NL condition (Fig. 6G). Notably, NR condition increased IA productivity, titer, and yield, indicating that the growth-­associated production strategy with nitrogen feeding and mimicking IDH down-­regulation works well. This condition was further tested in bioreactors, and 68.1 g/liter IA was produced in 16.75 days (Fig. 6H), using ammonium sulfate as nitrogen source. However, to maintain the pH at 5.5, large volumes of base (6 M KOH) were required (fig. S13) because of the acidification. This drastically increased the cultivation volume, lowering the IA titer after 17 days, although the absolute amount of IA still increases (fig. S13). Ammonium sulfate consumption reduces the pH, while using urea, an alternative and cheap nitrogen source (that does not act as carbon source for Y. lipolytica), will not acidify the medium (62). Thus, using urea as nitrogen source reduced the base feeding volumes and considerably increased IA titer to 130.5 g/ liter IA with a yield of 0.320 mol/mol glucose. These results suggested the successful establishment of our engineered strain as a promising candidate for IA production (table S1 and S2). To verify performance during the scale-­up at a semipilot scale, we cultivated the strain JFYL122 in a 50-­liter bioreactor using urea as the nitrogen source. Within 2 days, the OD600 quickly rose to 160, and we obtained the highest productivity (0.566 g/liter per hour).",
+      "source_sha256": "0d3aee0f7f7d354a60f7e4e0cd5847db2367b48f3e7df28ba5b8565078235ff4"
+    },
+    {
+      "id": "evidence_91c1630e6cd610cb4abe",
+      "source_id": "paper_44d2c17c59b82fbbfaaa",
+      "citation": "Reprogramming Yarrowia lipolytica metabolism for efficient synthesis of itaconic acid from flask to semipilot scale. Science Advances. 2024.",
+      "page": 9,
+      "quote": "To verify performance during the scale-­up at a semipilot scale, we cultivated the strain JFYL122 in a 50-­liter bioreactor using urea as the nitrogen source. Within 2 days, the OD600 quickly rose to 160, and we obtained the highest productivity (0.566 g/liter per hour). Because of accidental glucose limitation between days 8 and 9, the cells lost their vitality. After the glucose limitation was removed, the fermentation took an additional 3 days to recover. However, IA production continued afterwards with high productivity. A final titer of 94.1 g/liter IA with a productivity of 0.238 g/liter per hour and a yield of 0.36 mol/mol glucose were reached after day 16.58. The total amount of IA produced during this fermentation was 6161.9 g. These results indicate that our engineered strain JFYL122 exhibited robustness during the scale-­up process, making it a promising IA producer at industrial-­scale fermentation. DISCUSSION IA enables the synthesis of many valuable bio-­based products with remarkable properties and exhibits potential applications in the biomedical field. Until recently, commercial IA bioproduction was limited to A. terreus and U.",
+      "source_sha256": "0d3aee0f7f7d354a60f7e4e0cd5847db2367b48f3e7df28ba5b8565078235ff4"
+    },
+    {
+      "id": "evidence_2c0d4d2b537161b6567f",
+      "source_id": "paper_44d2c17c59b82fbbfaaa",
+      "citation": "Reprogramming Yarrowia lipolytica metabolism for efficient synthesis of itaconic acid from flask to semipilot scale. Science Advances. 2024.",
+      "page": 8,
+      "quote": "The cultivation in 50 liters was carried out as a single experiment, and all other bioreactor cultivations were carried out in two replicates. The presented cultivations depict a single representative cultivation for (C), (D), (E), (G), (H), and (I).",
+      "source_sha256": "0d3aee0f7f7d354a60f7e4e0cd5847db2367b48f3e7df28ba5b8565078235ff4"
+    },
+    {
+      "id": "evidence_665f5f0f2cccfb033798",
+      "source_id": "paper_44f96533e43ddd09de5e",
+      "citation": "Enhancing selective itaconic acid synthesis in Yarrowia lipolytica through targeted metabolite transport reprogramming. Biotechnology for Biofuels and Bioproducts. 2025.",
+      "page": 6,
+      "quote": "Growth curves and the production of organic acids by Y. lipolytica strains were monitored in YNB medium supplemented with 90 g/L glucose and 2 g/L ammonium sulphate (C/N ratio of 85). Cultivation was carried out in 250-mL baffled flasks containing 50 mL of medium for 10 days in an orbital shaker at 29 °C and 200 rpm. The medium’s pH was buffered by adding sterile 10 g/L ­CaCO3 (Sigma-Aldrich, St. Louis, MO, USA) after 4–6 h of incubation. Cells were inoculated from an overnight seed culture in YPD to an initial optical density ­(OD600) of 0.1.",
+      "source_sha256": "4f1288cd57804becfa74cd9fa7b7f7c5472512cf3c4906b12c72a34ad4fe1022"
+    },
+    {
+      "id": "evidence_b0ed7a078c2e97f04a4e",
+      "source_id": "paper_44f96533e43ddd09de5e",
+      "citation": "Enhancing selective itaconic acid synthesis in Yarrowia lipolytica through targeted metabolite transport reprogramming. Biotechnology for Biofuels and Bioproducts. 2025.",
+      "page": 6,
+      "quote": "Fed-Batch fermentation was conducted in a 2.0 L bioreactor (BIOSTAT B Plus; Sartorius, Germany) with a starting working volume of 0.7 L. The bioreactor production medium consisted of YNB (1.7 g/L) supplemented with either glucose or glycerol (Sigma-Aldrich, St. Louis, MO, USA) (each at 30 g/L) and ammonium sulphate (3 g/L). The seed culture was grown for 24 h in a 250-mL baffled flask containing 50 mL of YPD medium. The bioreactor was inoculated at an initial ­OD600 1.0 and the cultivation was conducted for a period of 9 days. The agitation rate was maintained at 800 rpm, while the aeration rate was initially set at 1.0 vvm for the first 48 h and then reduced to 0.7 vvm. The pH was automatically maintained at 6.0 by adding a 40% NaOH solution. Approximately every 24 h, the culture was fed with the carbon source (glucose or glycerol) and ammonium sulphate. Glucose or glycerol were added based on the measured consumption from the previous 24 h, with a 10% increase. Accordingly, ammonium sulphate was added to maintain a C/N ratio of 94. A silicone-based anti-foaming emulsion 30 (Carl Roth GmbH, Germany) was used. Analytical methods The flask cultivations were monitored by measuring the growth of the yeast cells using a spectrophotometer to determine ­OD600. The supernatant was collected after neutralising ­CaCO3 with a 1 M HCl solution and separating the cells by centrifugation at 12,000 g for 5 min. The supernatant was then stored at −20 °C until analysis. The bioreactor cultivation was monitored by sampling 10 mL every 24 h.",
+      "source_sha256": "4f1288cd57804becfa74cd9fa7b7f7c5472512cf3c4906b12c72a34ad4fe1022"
+    },
+    {
+      "id": "evidence_cb6a9febd58340cf4bfe",
+      "source_id": "paper_44f96533e43ddd09de5e",
+      "citation": "Enhancing selective itaconic acid synthesis in Yarrowia lipolytica through targeted metabolite transport reprogramming. Biotechnology for Biofuels and Bioproducts. 2025.",
+      "page": 10,
+      "quote": "However, when both IA biosynthetic pathways, from A. terreus and U. maydis, were combined in single strain with deletions of both YlYHM2 and YlCEX1, the resulting strain YM4B493 (W29 ∆ku70 ∆Ylyhm2 ∆Ylcex1 IntC2:cadA-mttA-mfsA IntF11:adi1-tad1 IntB11:mtt1itp1) (Fig. 5A) accumulated IA at final titre of 19.66 ± 0.36 g/L after 240 h of cultivation (Fig. 5B), with a yield of 0.303 ± 0.006 mol/mol ­(YIA/GLU) (Fig. 5C). This represented a 2.5-fold increase in IA production compared to the parental strain YM4B324, which carried only the genes of the A. terreus pathway. Biomass formation reached a final titre of 11.27 ± 0.28 g/L (Fig. 5B), which corresponded to the lowest concentration observed among all the recombinant strains. These findings suggests that extensive strain engineering may have a slight toxic effect on yeast growth. Both strains (YM4B374 and YM4B493) expressing two copies of the genes of the IA biosynthetic pathways (either 2 copies of the genes of the A. terreus pathway or 1 copy of the genes of the A. terreus + 1 copy of the genes of the U.",
+      "source_sha256": "4f1288cd57804becfa74cd9fa7b7f7c5472512cf3c4906b12c72a34ad4fe1022"
+    },
+    {
+      "id": "evidence_02245b224fbfa88c97d7",
+      "source_id": "paper_44f96533e43ddd09de5e",
+      "citation": "Enhancing selective itaconic acid synthesis in Yarrowia lipolytica through targeted metabolite transport reprogramming. Biotechnology for Biofuels and Bioproducts. 2025.",
+      "page": 10,
+      "quote": "Bioreactor cultivations of the highest-performing IA producer strain YM4B493 (W29 ∆ku70 ∆Ylyhm2 ∆Ylcex1 IntC2:cadA-mttA-mfsA IntF11:adi1-tad1 IntB11:mtt1itp1) were carried out under controlled conditions using pulse-feeding of either glucose or glycerol as carbon sources (Fig. 6). Concurrently, nitrogen was supplemented to adjust the C/N ratio to 94, thereby inducing nitrogen limitation, a condition known to enhance organic acid production [57]. The average substrate consumption rates were comparable between the two carbon sources, resulting in 1.01 g/L/h for glucose and 0.90 g/L/h for glycerol. The highest IA titres were achieved at the end of the fermentation (215 h), reaching 55.08 g/L with glucose and 37.71 g/L with glycerol, respectively. The IA yield was 0.343 mol/mol ­(YIA/GLU) when glucose was used as the carbon source and 0.134 mol/mol ­(YIA/GLY) with glycerol, respectively. The lower yield observed with glycerol could be attributed to the formation of side-metabolites, including cis-aconitate, malate, (See figure on next page.) Fig. 5 Evaluation of U. maydis IA biosynthetic pathway in Y. lipolytica. Y.",
+      "source_sha256": "4f1288cd57804becfa74cd9fa7b7f7c5472512cf3c4906b12c72a34ad4fe1022"
+    },
+    {
+      "id": "evidence_8d586edf6a1760470da0",
+      "source_id": "paper_44f96533e43ddd09de5e",
+      "citation": "Enhancing selective itaconic acid synthesis in Yarrowia lipolytica through targeted metabolite transport reprogramming. Biotechnology for Biofuels and Bioproducts. 2025.",
+      "page": 12,
+      "quote": "In contrast, glucose-fed cultivation exhibited succinate as the sole detectable by-product, with a final concentration of 3.42 g/L. The highest IA productivity was recorded during the late stages of cultivation, between 137 and 215 h, reaching a rate of 1.67 g/L/h with glucose and 1.08 g/L/h with glycerol. The overall average IA productivities across the entire cultivation period were 0.256 g/L/h for glucose and 0.175 g/L/h for glycerol. Discussion The aim of this study was to develop a microbial platform for IA production, a building block with applications in several industrial sectors, particularly polymer synthesis. Using various metabolic engineering strategies, a recombinant Y.",
+      "source_sha256": "4f1288cd57804becfa74cd9fa7b7f7c5472512cf3c4906b12c72a34ad4fe1022"
+    },
+    {
+      "id": "evidence_1cc4b0e5b66e56ce4dc2",
+      "source_id": "paper_44f96533e43ddd09de5e",
+      "citation": "Enhancing selective itaconic acid synthesis in Yarrowia lipolytica through targeted metabolite transport reprogramming. Biotechnology for Biofuels and Bioproducts. 2025.",
+      "page": 12,
+      "quote": "strain YM4B493 during fed-batch cultivations in bioreactor. Cultivation on (A) glucose and (B) glycerol of the recombinant strain YM4B493 (W29 ∆ku70 ∆Ylyhm2 ∆Ylcex1 IntC2:cadA-mttA-mfsA IntF11:adi1-tad1 IntB11:mtt1-itp1) for 9 days. DCW, Dry Cell Weight; GLU, glucose; GLY, glycerol; IA, itaconic acid.",
+      "source_sha256": "4f1288cd57804becfa74cd9fa7b7f7c5472512cf3c4906b12c72a34ad4fe1022"
+    },
+    {
+      "id": "evidence_53514937d4990847dd07",
+      "source_id": "paper_44f96533e43ddd09de5e",
+      "citation": "Enhancing selective itaconic acid synthesis in Yarrowia lipolytica through targeted metabolite transport reprogramming. Biotechnology for Biofuels and Bioproducts. 2025.",
+      "page": 2,
+      "quote": "The IA biosynthetic pathway in A. terreus (Fig. 1) is characterized by the presence of cis-aconitate decarboxylase (CadA), a cytosolic enzyme that converts cis-aconitate into IA. Additionally,",
+      "source_sha256": "4f1288cd57804becfa74cd9fa7b7f7c5472512cf3c4906b12c72a34ad4fe1022"
+    },
+    {
+      "id": "evidence_4f14d03e1558ef32df58",
+      "source_id": "paper_44f96533e43ddd09de5e",
+      "citation": "Enhancing selective itaconic acid synthesis in Yarrowia lipolytica through targeted metabolite transport reprogramming. Biotechnology for Biofuels and Bioproducts. 2025.",
+      "page": 3,
+      "quote": "The aconitase-∆-isomerase (Adi1) converts cis-aconitate into trans-aconitate, and the trans-aconitate decarboxylase (Tad1) then acts on trans-aconitate to release IA. Both of these enzymatic activities occur in the cytosol. The pathway also includes the mitochondrial transporter (Mtt1), which facilitates the transport of cisaconitate from the mitochondria to the cytosol. Finally, IA is secreted by the itaconate transporter protein Itp1 [33]. Several efficient U. maydis IA producing strains have been developed but this microorganism has notable drawbacks.",
+      "source_sha256": "4f1288cd57804becfa74cd9fa7b7f7c5472512cf3c4906b12c72a34ad4fe1022"
+    }
+  ],
+  "actions": [
+    {
+      "id": "action_d0d66d4c2599ae932ff2",
+      "label": "Compare the combined itaconate pathways and transporter deletions with a parental strain",
+      "evidence_refs": [
+        "evidence_cb6a9febd58340cf4bfe"
+      ],
+      "disposition": "eligible",
+      "applied_rule_ids": []
+    },
+    {
+      "id": "action_b140b5471558f75042af",
+      "label": "Evaluate feeding and pH control in an existing itaconate-producing strain",
+      "evidence_refs": [
+        "evidence_ef2739824fef25a294ed",
+        "evidence_02d948a602069ce47b29"
+      ],
+      "disposition": "eligible",
+      "applied_rule_ids": []
+    }
+  ],
+  "posts": [
+    {
+      "id": "reviewed_perspective_c8e21d4188500c6bb75c",
+      "round": 1,
+      "role": "Strain engineering",
+      "kind": "perspective",
+      "text": "Ciliberti reports 19.66 ± 0.36 g/L itaconic acid after 240 hours for YM4B493, combining the A. terreus and U. maydis pathways with YlYHM2 and YlCEX1 deletions. This was 2.5 times the parental strain result, alongside lower biomass. I would compare this genetic design with our starting strain before choosing an engineering experiment.",
+      "caveat": "Our starting genotype is not recorded. This combined intervention does not isolate the contribution of each gene or deletion.",
+      "evidence_refs": [
+        "evidence_cb6a9febd58340cf4bfe"
+      ],
+      "reply_to": null,
+      "action_ids": [
+        "action_d0d66d4c2599ae932ff2"
+      ]
+    },
+    {
+      "id": "reviewed_perspective_b348491a2c34560ec2a9",
+      "round": 1,
+      "role": "Process feasibility",
+      "kind": "perspective",
+      "text": "Fu reports that continuous feeding raised production to 24.5 g/L by day six, but glucose consumption and production then stopped. Raising pH from 3.5 to 5.5 restored consumption and production. If our strain already produces itaconate, feeding and pH control are concrete factors to investigate.",
+      "caveat": "This is evidence from an engineered producer. The paper does not establish that cultivation changes alone would make our starting strain productive; our strain and equipment are unknown.",
+      "evidence_refs": [
+        "evidence_ef2739824fef25a294ed"
+      ],
+      "reply_to": null,
+      "action_ids": [
+        "action_b140b5471558f75042af"
+      ]
+    },
+    {
+      "id": "reviewed_perspective_d457e377d969f9f3742a",
+      "round": 1,
+      "role": "Measurement and evidence",
+      "kind": "perspective",
+      "text": "Ciliberti reports 55.08 g/L on glucose and 37.71 g/L on glycerol at 215 hours in controlled bioreactor cultivation. These are different substrate conditions, and neither should be treated as interchangeable with the 19.66 g/L flask result. Compare strain, substrate, vessel, duration and yield before interpreting differences in titer.",
+      "caveat": "The cross-condition results do not establish a causal ranking of pathway engineering versus cultivation changes. A matched baseline is needed for our own experiment.",
+      "evidence_refs": [
+        "evidence_cb6a9febd58340cf4bfe",
+        "evidence_02245b224fbfa88c97d7"
+      ],
+      "reply_to": null,
+      "action_ids": [
+        "action_b140b5471558f75042af"
+      ]
+    },
+    {
+      "id": "reviewed_challenge_6b86b273ff34fce19d6b",
+      "round": 1,
+      "role": "Measurement and evidence",
+      "kind": "challenge",
+      "text": "The process result supports testing feeding and pH in an existing producer. It does not show that cultivation should always come first. Both studies used engineered strains, so we need to know which pathway is present in our starting strain before selecting that first experiment.",
+      "caveat": "",
+      "evidence_refs": [
+        "evidence_ef2739824fef25a294ed",
+        "evidence_cb6a9febd58340cf4bfe"
+      ],
+      "reply_to": "reviewed_perspective_b348491a2c34560ec2a9",
+      "action_ids": [
+        "action_b140b5471558f75042af",
+        "action_d0d66d4c2599ae932ff2"
+      ]
+    }
+  ],
+  "questions": [],
+  "rules": [],
+  "resolution_steps": [],
+  "rejected_proposals": [],
+  "model": "qwen3.5 · edited and source-reviewed by Codex",
+  "status": "ready"
+}

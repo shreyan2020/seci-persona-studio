@@ -1,0 +1,7 @@
+{
+  "source": "artifacts/itaconate-workflow/reviewed-perspectives.json",
+  "source_sha256": "b876972ed93e6c38a01f57ddb927921a0ad6463f8216ffd73a0168b2f40e993b",
+  "snapshot": "frontend/src/examples/itaconate.json",
+  "snapshot_sha256": "07b4b84fc6c713b0ab3c16fa1c5076401c6947d893a0106763becac7704500de",
+  "export": "Remove researcher posts, comparisons and repeated document context; reset workspace identity; retain reviewed scientific content."
+}

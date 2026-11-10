@@ -156,6 +156,8 @@ export interface ProjectJourneyResponse {
 }
 
 export interface ResearchFinding {
+  pdf_reader?: { context_key: string; url: string; modified?: string; path?: string };
+  structured_notes?: PaperStructuredNotes;
   id: string;
   citation: string;
   labels: string[];
@@ -235,12 +237,27 @@ export interface LiteratureToolTrace {
   error_message?: string | null;
 }
 
+export interface WorkflowStageTrace {
+  run_id: string;
+  stage: string;
+  status: 'success' | 'success_with_warnings' | 'skipped' | 'missing_capability' | 'error';
+  message: string;
+  started_at?: string | null;
+  ended_at?: string | null;
+  duration_ms?: number | null;
+  inputs: Record<string, unknown>;
+  outputs: Record<string, unknown>;
+  errors: string[];
+}
+
 export interface FetchProjectLiteratureResponse {
   findings: ResearchFinding[];
   tool_trace: LiteratureToolTrace;
   objective_lens?: string | null;
   processing_summary: string;
   elicitation_questions: string[];
+  workflow_trace?: WorkflowStageTrace[];
+  ontology_trace?: OntologyUsageTrace | null;
 }
 
 export interface SynthesizeLiteratureGapsResponse {
@@ -250,6 +267,9 @@ export interface SynthesizeLiteratureGapsResponse {
 }
 
 export interface PaperAnnotation {
+  passage_id?: string;
+  source_sha256?: string;
+  evidence_kind?: 'pdf_passage' | 'unverified';
   page: number;
   snippet: string;
   reason: string;
@@ -314,6 +334,143 @@ export interface TacitElicitationQuestion {
   priority: 'low' | 'medium' | 'high';
 }
 
+export interface BeliefHypothesis {
+  id: string;
+  proposition: string;
+  probability: number;
+  evidence_refs: string[];
+}
+
+export interface BeliefVariable {
+  id: string;
+  label: string;
+  hypotheses: BeliefHypothesis[];
+}
+
+export interface ElicitationAnswerOption {
+  id: string;
+  label: string;
+  allows_free_text: boolean;
+}
+
+export interface HypothesisAnswerPrediction {
+  hypothesis_id: string;
+  option_probabilities: Record<string, number>;
+}
+
+export interface QuestionLikelihoodModel {
+  id: string;
+  weight: number;
+  predictions: HypothesisAnswerPrediction[];
+}
+
+export interface DecisionWorld {
+  id: string;
+  label: string;
+  probability: number;
+  hypothesis_assignments: Record<string, string>;
+}
+
+export interface DecisionAction {
+  id: string;
+  label: string;
+  loss_by_world: Record<string, number>;
+}
+
+export interface AdaptiveElicitationQuestion {
+  id: string;
+  target_variable_id: string;
+  question: string;
+  why_it_matters: string;
+  gap_id?: string | null;
+  gap_type?: string | null;
+  evidence_refs?: string[];
+  resolution_rationale?: string;
+  alternative_resolution?: string;
+  answer_options: ElicitationAnswerOption[];
+  predictions: HypothesisAnswerPrediction[];
+  likelihood_models?: QuestionLikelihoodModel[];
+  decision_relevance: number;
+  answerability: number;
+  estimated_effort_seconds: number;
+  question_cost?: number;
+  expected_information_gain: number;
+  expected_geodesic_gain?: number;
+  geometric_novelty?: number;
+  target_normalized_uncertainty?: number;
+  expected_bayes_risk_reduction?: number;
+  robust_bayes_risk_reduction?: number;
+  probability_of_action_change?: number;
+  net_value?: number;
+  selection_score: number;
+  selection_rationale: string;
+  status: 'candidate' | 'answered' | 'skipped';
+}
+
+export interface AdaptiveElicitationAnswer {
+  question_id: string;
+  option_id: string;
+  option_label: string;
+  free_text: string;
+  entropy_before: number;
+  entropy_after: number;
+  information_gain: number;
+  belief_shift?: number;
+}
+
+export interface AdaptiveElicitationSession {
+  id: string;
+  workspace_key: string;
+  context_digest: string;
+  belief_variables: BeliefVariable[];
+  decision_worlds?: DecisionWorld[];
+  decision_actions?: DecisionAction[];
+  decision_model_source?: 'explicit' | 'derived';
+  candidate_questions: AdaptiveElicitationQuestion[];
+  current_question_id?: string | null;
+  answer_history: AdaptiveElicitationAnswer[];
+  initial_entropy: number;
+  current_entropy: number;
+  uncertainty_reduction: number;
+  initial_normalized_uncertainty?: number;
+  normalized_uncertainty?: number;
+  initial_bayes_risk?: number;
+  current_bayes_risk?: number;
+  bayes_risk_reduction?: number;
+  current_best_action_id?: string | null;
+  status: 'active' | 'complete';
+  selection_mode?: 'discrimination' | 'discovery' | 'complete';
+  stopping_reason?: string | null;
+  generation_source: 'harness' | 'model' | 'fallback';
+  epistemic_trace?: {
+    run_id?: string;
+    world_summary?: string;
+    sources_processed?: number;
+    accepted_claims?: number;
+    rejected_claims?: number;
+    gap_count?: number;
+    routing_counts?: Record<string, number>;
+    gaps?: Array<{
+      id: string;
+      statement: string;
+      gap_type: string;
+      recommended_action: string;
+      routing_rationale: string;
+    }>;
+  };
+  max_questions: number;
+  min_information_gain: number;
+  min_geodesic_gain?: number;
+  max_normalized_uncertainty_for_stop?: number;
+  robust_quantile?: number;
+  cost_per_second?: number;
+  min_net_value?: number;
+}
+
+export interface AdaptiveElicitationResponse {
+  session: AdaptiveElicitationSession;
+}
+
 export interface WorkspaceMemory {
   workspace_key: string;
   scope: string;
@@ -357,6 +514,19 @@ export interface OntologyEdge {
 export interface OntologyQueryAugmentation {
   expanded_terms: string[];
   filters: Record<string, string[]>;
+  reasoning_lenses: string[];
+  tacit_context: string[];
+  search_routing: string[];
+}
+
+export interface OntologyUsageTrace {
+  id: string;
+  purpose: string;
+  title: string;
+  summary: string;
+  node_ids: string[];
+  edge_ids: string[];
+  expanded_terms: string[];
   reasoning_lenses: string[];
   tacit_context: string[];
   search_routing: string[];

@@ -4,6 +4,7 @@ import os
 from copy import deepcopy
 from typing import Any, Dict, Iterable, List
 
+from database import db
 from models import PersonaPayload
 from ollama_client import ollama
 from persona_extractor import build_persona_summary
@@ -176,6 +177,13 @@ def _clean_strings(values: Iterable[Any], limit: int) -> List[str]:
     return out
 
 
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
 def _project_context(
     project_name: str,
     end_product: str,
@@ -314,6 +322,50 @@ async def build_project_personas(
     context = _project_context(project_name, end_product, target_host, project_goal, raw_material_focus, notes)
     project_slug = _slugify(project_name)
     persona_model = os.getenv("OLLAMA_PERSONA_MODEL") or os.getenv("OLLAMA_SOTA_MODEL") or ollama.model
+    cache_inputs = {
+        "version": 1,
+        "model": persona_model,
+        "project_name": project_name.strip(),
+        "end_product": end_product.strip(),
+        "target_host": target_host.strip(),
+        "project_goal": project_goal.strip(),
+        "raw_material_focus": raw_material_focus.strip(),
+        "notes": notes.strip(),
+    }
+    cache_key = db.llm_cache_key("project_personas", cache_inputs)
+
+    cached = db.get_llm_cache(cache_key)
+    raw_personas = (cached or {}).get("payload", {}).get("personas") if cached else None
+    if isinstance(raw_personas, list):
+        personas: List[Dict[str, Any]] = []
+        for index, raw in enumerate(raw_personas[:6], start=1):
+            if not isinstance(raw, dict):
+                continue
+            personas.append(
+                _materialize_persona(
+                    raw,
+                    index=index,
+                    project_slug=project_slug,
+                    scope_id=scope_id,
+                    context=context,
+                    default_name=f"{project_name} Workflow Persona {index}",
+                    default_stage="general",
+                    dynamic_generation=True,
+                )
+            )
+        if len(personas) >= 4:
+            return personas
+
+    if os.getenv("OLLAMA_PROJECT_PERSONAS_ENABLED", "1") == "0":
+        return _fallback_personas(
+            project_name=project_name,
+            scope_id=scope_id,
+            end_product=end_product,
+            target_host=target_host,
+            project_goal=project_goal,
+            raw_material_focus=raw_material_focus,
+            notes=notes,
+        )
 
     try:
         response = await ollama.generate_json(
@@ -327,10 +379,11 @@ async def build_project_personas(
                     "notes": notes,
                 }
             ),
-            max_retries=2,
+            max_retries=0,
             temperature=0.2,
             top_p=0.9,
             model=persona_model,
+            timeout_seconds=_env_float("OLLAMA_PROJECT_PERSONA_TIMEOUT_SECONDS", 20.0),
         )
         raw_personas = response.get("personas") if isinstance(response, dict) else None
         if isinstance(raw_personas, list):
@@ -351,6 +404,13 @@ async def build_project_personas(
                     )
                 )
             if len(personas) >= 4:
+                db.upsert_llm_cache(
+                    cache_key=cache_key,
+                    task_type="project_personas",
+                    model=persona_model,
+                    payload={"personas": raw_personas[:6]},
+                    metadata={"source": "ollama"},
+                )
                 return personas
     except Exception:
         pass

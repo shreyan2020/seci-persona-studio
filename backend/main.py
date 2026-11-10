@@ -1,8 +1,11 @@
+from paper_upload import paper_upload_router
+from paper_storage import paper_evidence_root
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Set
 import asyncio
+import hashlib
 import os
 from datetime import datetime
 from pathlib import Path
@@ -57,7 +60,7 @@ from models import (
     SynthesizeLiteratureGapsRequest, SynthesizeLiteratureGapsResponse, ResearchGap, CrossPaperSynthesis,
     PreparePaperPdfRequest, PreparePaperPdfResponse, PaperAnnotation,
     TacitMemoryItem, TacitElicitationQuestion, WorkspaceMemory, WorkspaceMemoryRequest, WorkspaceMemoryResponse,
-    BuildOntologyPreviewRequest, BuildPaperOntologyRequest, OntologyPreviewResponse, OntologyReviewRequest,
+    BuildOntologyPreviewRequest, BuildPaperOntologyRequest, OntologyPreviewResponse, OntologyReviewRequest, OntologyUsageTrace,
     RunValidationTrackRequest, RunValidationTrackResponse,
 )
 from ollama_client import ollama
@@ -94,8 +97,24 @@ from research_tools import annotate_pdf_for_objective, download_open_access_pdf,
 from scientific_pdf_parsing import parse_scientific_pdf
 from ontology_service import build_ontology_preview, build_paper_ontology_enriched, ontology_response_from_graph
 from sota_literature_workflow import WorkflowError, WorkflowTraceLogger, run_sota_literature_workflow
+from adaptive_elicitation import (
+    AdaptiveElicitationResponse,
+    AnswerAdaptiveElicitationRequest,
+    StartAdaptiveElicitationRequest,
+    answer_question as answer_adaptive_elicitation_question,
+    build_generation_prompt as build_adaptive_elicitation_prompt,
+    create_session as create_adaptive_elicitation_session,
+    fallback_payload as fallback_adaptive_elicitation_payload,
+)
+from epistemic_harness import (
+    extract_literature_sources,
+    harness_run_id,
+    run_epistemic_gap_harness,
+)
 
 app = FastAPI(title="SECI Query Explorer API", version="1.0.0")
+from research_board_api import board_router
+app.include_router(board_router(db, ollama))
 
 _persona_refactor_task: Optional[asyncio.Task] = None
 _persona_refactor_lock = asyncio.Lock()
@@ -166,6 +185,13 @@ def _truncate_text(value: str, limit: int = 120) -> str:
     if len(text) <= limit:
         return text
     return text[: limit - 3].rstrip() + "..."
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
 
 
 def _fallback_objective_clusters(request: ObjectivesRequest) -> ObjectivesResponse:
@@ -1319,7 +1345,7 @@ def _literature_record_to_research_finding(record: dict, index: int) -> Research
         labels.append(year)
     relevance_score = record.get("relevance_score")
     if isinstance(relevance_score, (int, float)):
-        labels.append(f"relevance score: {float(relevance_score):.2f}")
+        labels.append(f"keyword ranking score (not confidence): {float(relevance_score):.2f}")
     matched_terms = [str(item).strip() for item in (record.get("matched_query_terms") or []) if str(item).strip()]
     if matched_terms:
         labels.append(f"matched terms: {', '.join(matched_terms[:6])}")
@@ -1327,6 +1353,10 @@ def _literature_record_to_research_finding(record: dict, index: int) -> Research
     if matched_phrases:
         labels.append(f"matched phrases: {', '.join(matched_phrases[:3])}")
     evidence_role = str(record.get("evidence_role") or "").strip()
+    scope = (record.get("relevance_screening") or {}).get("scope")
+    if scope:
+        labels.insert(0, f"topic scope: {scope}")
+        labels.insert(1, str((record.get("relevance_screening") or {}).get("reason") or ""))
     if evidence_role:
         labels.append(f"evidence role: {evidence_role}")
     source_ids = {
@@ -1334,17 +1364,17 @@ def _literature_record_to_research_finding(record: dict, index: int) -> Research
         for key in ["pmid", "pmcid", "doi", "pdf_url", "semantic_scholar_paper_id"]
         if str(record.get(key) or "").strip()
     }
-    relevance_parts = [abstract]
+    relevance_parts = []
     llm_rationale = str(record.get("llm_rank_rationale") or "").strip()
-    if llm_rationale:
-        relevance_parts.insert(0, f"Ranking rationale: {llm_rationale}")
+    if llm_rationale and llm_rationale != "specific positive contribution supported by the candidate metadata":
+        relevance_parts.append(llm_rationale)
     for key, value in source_ids.items():
         labels.append(f"{key.upper()}: {value}")
     return ResearchFinding(
         id=f"lit_fetch_{index}",
         citation=str(record.get("citation") or title or f"PubMed result {index}").strip(),
         labels=labels,
-        knowns=[title] if title else [],
+        knowns=[abstract or title] if (abstract or title) else [],
         unknowns=[],
         relevance=_trim_to_sentence_boundary("\n\n".join(part for part in relevance_parts if part), max_chars=1200),
         source_ids=source_ids,
@@ -1376,7 +1406,7 @@ def _fallback_literature_processing(
             "feasibility, and priority still need the user's domain judgment."
         ),
         "elicitation_questions": [
-            "Which fetched papers look most transferable to your target flavonoid and yeast strain, and why?",
+            "Which fetched papers look most transferable to your target product and production strain, and why?",
             "Which reported methods are infeasible, too expensive, or outside the lab's current capability?",
             "Which results should be treated as strong evidence versus only a loose analogy for this objective?",
             "What boundary conditions matter most before these findings become experiment-plan inputs?",
@@ -1399,6 +1429,7 @@ async def _synthesize_literature_processing(
     for index, record in enumerate(records, start=1):
         compact_records.append(
             {
+                "record_id": f"record_{index}",
                 "index": index,
                 "title": str(record.get("title") or "")[:500],
                 "citation": str(record.get("citation") or "")[:500],
@@ -1409,7 +1440,7 @@ async def _synthesize_literature_processing(
 
     prompt = f"""
 You are helping a scientist review fetched literature before drafting an experiment plan.
-Use only the PubMed records below. Do not invent paper details that are not in titles, citations, or abstract excerpts.
+Use only the fetched literature records below. Do not invent paper details that are not in titles, citations, or abstract excerpts.
 
 Project goal: {project.get("project_goal") or project.get("name") or ""}
 Target host: {project.get("target_host") or ""}
@@ -1431,42 +1462,61 @@ Return JSON with this exact shape:
   ],
   "findings": [
     {{
-      "citation": "citation from the fetched record",
-      "labels": ["short label", "objective-conditioned"],
+      "record_id": "record_1",
+      "labels": ["direct host evidence", "quantitative benchmark"],
       "knowns": ["what the fetched title/abstract directly supports"],
       "unknowns": ["what remains unresolved for this project/objective"],
       "relevance": "why this item may matter for the selected objective"
     }}
   ]
 }}
+Assess every fetched record in record order. The record_id is mandatory.
+If a record is irrelevant, set relevant to false and explain why; do not invent a background connection.
+Respect the supplied topic scope and substrate/host transfer limitations.
+Do not repeat, alter, or infer citation metadata; the application attaches immutable source metadata after your analysis.
 """.strip()
     try:
         payload = await ollama.generate_json(prompt)
         raw_findings = payload.get("findings") if isinstance(payload, dict) else None
-        findings: List[ResearchFinding] = []
+        enriched_by_record_id: Dict[str, dict] = {}
         if isinstance(raw_findings, list):
-            for index, item in enumerate(raw_findings, start=1):
+            for item in raw_findings:
                 if not isinstance(item, dict):
                     continue
-                source_finding = fallback_findings[index - 1] if index - 1 < len(fallback_findings) else None
-                citation = str(
-                    item.get("citation")
-                    or (source_finding.citation if source_finding else "")
-                    or f"PubMed result {index}"
-                ).strip()
-                findings.append(
-                    ResearchFinding(
-                        id=f"lit_fetch_{index}",
-                        citation=citation,
-                        labels=[str(label).strip() for label in (item.get("labels") or []) if str(label).strip()][:6]
-                        or (source_finding.labels if source_finding else ["pubmed", "literature fetch"]),
-                        knowns=[str(value).strip() for value in (item.get("knowns") or []) if str(value).strip()][:5]
-                        or (source_finding.knowns if source_finding else []),
-                        unknowns=[str(value).strip() for value in (item.get("unknowns") or []) if str(value).strip()][:5],
-                        relevance=str(item.get("relevance") or (source_finding.relevance if source_finding else "")).strip()[:1200],
-                        source_ids=(source_finding.source_ids if source_finding else {}),
-                    )
+                record_id = str(item.get("record_id") or "").strip()
+                if record_id in {f"record_{index}" for index in range(1, len(fallback_findings) + 1)}:
+                    enriched_by_record_id[record_id] = item
+
+        def string_list(value: Any, *, limit: int) -> List[str]:
+            values = value if isinstance(value, list) else [value] if isinstance(value, str) else []
+            return [str(item).strip() for item in values if str(item).strip()][:limit]
+
+        findings: List[ResearchFinding] = []
+        for index, source_finding in enumerate(fallback_findings, start=1):
+            item = enriched_by_record_id.get(f"record_{index}")
+            if not item:
+                findings.append(source_finding)
+                continue
+            if item.get("relevant") is False or re.search(r"(?i)\b(not relevant|irrelevant|unrelated|not useful)\b", str(item.get("relevance") or "")):
+                continue
+            labels = [
+                label
+                for label in string_list(item.get("labels"), limit=6)
+                if label.lower() not in {"short label", "objective-conditioned"}
+            ]
+            knowns = string_list(item.get("knowns"), limit=5)
+            unknowns = string_list(item.get("unknowns"), limit=5)
+            findings.append(
+                ResearchFinding(
+                    id=source_finding.id,
+                    citation=source_finding.citation,
+                    labels=list(dict.fromkeys([*source_finding.labels, *labels]))[:10],
+                    knowns=knowns or source_finding.knowns,
+                    unknowns=unknowns,
+                    relevance=str(item.get("relevance") or source_finding.relevance).strip()[:1200],
+                    source_ids=dict(source_finding.source_ids),
                 )
+            )
 
         fallback = _fallback_literature_processing(request, fallback_findings)
         questions = payload.get("elicitation_questions") if isinstance(payload, dict) else []
@@ -1475,7 +1525,7 @@ Return JSON with this exact shape:
             "processing_summary": str(payload.get("processing_summary") or fallback["processing_summary"]).strip(),
             "elicitation_questions": [str(question).strip() for question in questions if str(question).strip()][:5]
             or fallback["elicitation_questions"],
-            "findings": findings or fallback_findings,
+            "findings": findings,
         }
     except Exception:
         return _fallback_literature_processing(request, fallback_findings) | {"findings": fallback_findings}
@@ -1881,6 +1931,44 @@ async def get_project(project_id: int):
     return _project_row_to_response(row)
 
 
+def _ontology_graph_fingerprint(nodes: List[Dict[str, Any]], edges: List[Dict[str, Any]]) -> str:
+    payload = {
+        "nodes": sorted(
+            [
+                {
+                    "id": node.get("id"),
+                    "type": node.get("type"),
+                    "label": node.get("label"),
+                    "description": node.get("description"),
+                    "source_refs": sorted(node.get("source_refs") or []),
+                    "attributes": node.get("attributes") or {},
+                    "confidence": node.get("confidence"),
+                    "status": node.get("status"),
+                }
+                for node in nodes
+            ],
+            key=lambda item: (str(item.get("type")), str(item.get("label")).lower(), str(item.get("id"))),
+        ),
+        "edges": sorted(
+            [
+                {
+                    "id": edge.get("id"),
+                    "source": edge.get("source"),
+                    "target": edge.get("target"),
+                    "relation": edge.get("relation"),
+                    "evidence": sorted(edge.get("evidence") or []),
+                    "confidence": edge.get("confidence"),
+                    "status": edge.get("status"),
+                }
+                for edge in edges
+            ],
+            key=lambda item: (str(item.get("relation")), str(item.get("source")), str(item.get("target")), str(item.get("id"))),
+        ),
+    }
+    encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
+
+
 @app.post("/api/projects/{project_id}/ontology/preview", response_model=OntologyPreviewResponse)
 async def preview_project_ontology(project_id: int, request: BuildOntologyPreviewRequest):
     row = db.get_project(project_id)
@@ -1895,6 +1983,25 @@ async def get_project_ontology(project_id: int):
     if not row:
         raise HTTPException(status_code=404, detail="Project not found")
     graph = db.get_project_ontology(project_id)
+    # The live board projection is computed from current revisions, so rejected
+    # facts and revoked rules disappear without leaving stale generated edges.
+    from research_board import BoardRepository, ResearchBoard
+    from board_knowledge import board_knowledge
+    from evidence_grounding import GROUNDING_VERSION
+    repository = BoardRepository(db.db_path)
+    prefix = re.sub(r'[^a-z0-9_-]+', '-', str(row.get('scope_id') or f'project-{project_id}').lower()) + '__'
+    with repository.connection() as conn:
+        payloads = conn.execute('SELECT workspace_key, payload FROM research_boards').fetchall()
+    for workspace_key, payload in payloads:
+        if workspace_key.startswith(prefix):
+            saved_board = ResearchBoard.model_validate_json(payload)
+            if saved_board.grounding_version != GROUNDING_VERSION:
+                continue
+            live = board_knowledge(saved_board)
+            graph['nodes'] = [*(graph.get('nodes') or []), *live['nodes']]
+            graph['edges'] = [*(graph.get('edges') or []), *live['edges']]
+    graph['nodes'] = list({n['id']:n for n in graph.get('nodes',[])}.values())
+    graph['edges'] = list({e['id']:e for e in graph.get('edges',[])}.values())
     return ontology_response_from_graph(
         project_id,
         graph.get("nodes") or [],
@@ -1910,12 +2017,16 @@ async def sync_project_ontology(project_id: int, request: BuildOntologyPreviewRe
     if not row:
         raise HTTPException(status_code=404, detail="Project not found")
     preview = build_ontology_preview(project_id, request)
+    preview_nodes = [node.model_dump() for node in preview.nodes]
+    preview_edges = [edge.model_dump() for edge in preview.edges]
+    graph_fingerprint = _ontology_graph_fingerprint(preview_nodes, preview_edges)
     graph = db.upsert_project_ontology(
         project_id,
-        [node.model_dump() for node in preview.nodes],
-        [edge.model_dump() for edge in preview.edges],
+        preview_nodes,
+        preview_edges,
         sync_source="workbench",
         input_summary=preview.summary,
+        replace_generated=True,
     )
     await log_event_safe(
         "ontology_synced",
@@ -1925,6 +2036,8 @@ async def sync_project_ontology(project_id: int, request: BuildOntologyPreviewRe
             "edges": len(preview.edges),
             "persona_id": request.persona_id,
             "query": request.query,
+            "generation_policy": "deterministic_grounded",
+            "graph_fingerprint": graph_fingerprint,
         },
     )
     return ontology_response_from_graph(
@@ -1985,12 +2098,17 @@ async def build_project_paper_ontology(project_id: int, request: BuildPaperOntol
 
     preview = await build_paper_ontology_enriched(project_id, request)
     if request.persist:
+        preview_nodes = [node.model_dump() for node in preview.nodes]
+        preview_edges = [edge.model_dump() for edge in preview.edges]
+        graph_fingerprint = _ontology_graph_fingerprint(preview_nodes, preview_edges)
+        sync_source = f"paper_ontology:{request.finding.id or 'unknown'}"
         graph = db.upsert_project_ontology(
             project_id,
-            [node.model_dump() for node in preview.nodes],
-            [edge.model_dump() for edge in preview.edges],
-            sync_source="paper_ontology",
+            preview_nodes,
+            preview_edges,
+            sync_source=sync_source,
             input_summary=preview.summary,
+            replace_generated=True,
         )
         await log_event_safe(
             "paper_ontology_built",
@@ -2001,6 +2119,9 @@ async def build_project_paper_ontology(project_id: int, request: BuildPaperOntol
                 "citation": request.finding.citation,
                 "nodes": len(preview.nodes),
                 "edges": len(preview.edges),
+                "extraction_mode": request.extraction_mode,
+                "generation_policy": "deterministic_grounded" if request.extraction_mode != "enriched" else "deterministic_plus_llm_enrichment",
+                "graph_fingerprint": graph_fingerprint,
             },
         )
         return ontology_response_from_graph(
@@ -2080,6 +2201,8 @@ async def update_project_query_session(project_id: int, query_id: int, request: 
     existing = db.get_project_query_session(query_id)
     if not existing or int(existing.get("project_id") or 0) != project_id:
         raise HTTPException(status_code=404, detail="Query session not found")
+    if request.query is not None and not request.query.strip() and str(existing.get("query") or "").strip():
+        raise HTTPException(status_code=400, detail="A non-empty investigation query cannot be overwritten with a blank autosave")
     row = db.update_project_query_session(
         query_id,
         title=request.title,
@@ -2468,6 +2591,101 @@ def _ontology_search_context(project_id: int) -> str:
     return "\n".join(parts)
 
 
+def _ontology_usage_trace(project_id: int, purpose: str, title: str, augmentation) -> Optional[OntologyUsageTrace]:
+    if not augmentation:
+        return None
+    graph = db.get_project_ontology(project_id)
+    nodes = graph.get("nodes") or []
+    edges = graph.get("edges") or []
+    if not nodes and not edges:
+        return None
+
+    def norm(value: Any) -> str:
+        return re.sub(r"\s+", " ", str(value or "").strip().lower())
+
+    expanded_terms = list(augmentation.expanded_terms or [])
+    reasoning_lenses = list(augmentation.reasoning_lenses or [])
+    tacit_context = list(augmentation.tacit_context or [])
+    search_routing = list(augmentation.search_routing or [])
+    term_keys = {norm(value) for value in [*expanded_terms, *reasoning_lenses] if norm(value)}
+    tacit_prefixes = {norm(value.split(":", 1)[0]) for value in tacit_context if norm(value)}
+
+    selected_node_ids: Set[str] = set()
+    for node in nodes:
+        node_id = str(node.get("id") or "")
+        label = norm(node.get("label"))
+        description = norm(node.get("description"))
+        node_type = str(node.get("type") or "")
+        if not node_id or node.get("status") == "rejected":
+            continue
+        if label in term_keys or label in tacit_prefixes:
+            selected_node_ids.add(node_id)
+            continue
+        if node_type == "tacit_memory" and label in tacit_prefixes:
+            selected_node_ids.add(node_id)
+            continue
+        if any(term and (term in label or term in description) for term in term_keys):
+            selected_node_ids.add(node_id)
+
+    route_type_map = {
+        "literature": {"paper"},
+        "paper_claims": {"claim"},
+        "project_beliefs": {"project_belief"},
+        "experiment_validation": {"validation"},
+        "tacit_memory": {"tacit_memory"},
+        "planning": {"plan", "plan_step"},
+    }
+    route_types = set().union(*(route_type_map.get(route, set()) for route in search_routing))
+    for node in nodes:
+        if len(selected_node_ids) >= 36:
+            break
+        node_id = str(node.get("id") or "")
+        if node_id and node.get("status") != "rejected" and str(node.get("type") or "") in route_types:
+            selected_node_ids.add(node_id)
+
+    selected_edge_ids: Set[str] = set()
+    expanded_neighbor_ids: Set[str] = set()
+    for edge in edges:
+        if edge.get("status") == "rejected":
+            continue
+        source = str(edge.get("source") or "")
+        target = str(edge.get("target") or "")
+        edge_id = str(edge.get("id") or "")
+        if source in selected_node_ids or target in selected_node_ids:
+            selected_edge_ids.add(edge_id)
+            expanded_neighbor_ids.update([source, target])
+        if len(selected_edge_ids) >= 90:
+            break
+    selected_node_ids.update(expanded_neighbor_ids)
+
+    trace_id = hashlib.sha256(
+        json.dumps(
+            {
+                "project_id": project_id,
+                "purpose": purpose,
+                "title": title,
+                "nodes": sorted(selected_node_ids),
+                "edges": sorted(selected_edge_ids),
+                "augmentation": augmentation.model_dump(),
+            },
+            sort_keys=True,
+            default=str,
+        ).encode("utf-8")
+    ).hexdigest()[:16]
+    return OntologyUsageTrace(
+        id=f"ontology_trace_{trace_id}",
+        purpose=purpose,
+        title=title,
+        summary=f"Ontology augmented {purpose} with {len(selected_node_ids)} entities and {len(selected_edge_ids)} relations.",
+        node_ids=sorted(selected_node_ids),
+        edge_ids=sorted(selected_edge_ids),
+        expanded_terms=expanded_terms[:18],
+        reasoning_lenses=reasoning_lenses[:10],
+        tacit_context=tacit_context[:8],
+        search_routing=search_routing,
+    )
+
+
 @app.post("/api/projects/{project_id}/literature", response_model=FetchProjectLiteratureResponse)
 async def fetch_project_literature(project_id: int, request: FetchProjectLiteratureRequest):
     project = db.get_project(project_id)
@@ -2498,6 +2716,7 @@ async def fetch_project_literature(project_id: int, request: FetchProjectLiterat
         if ontology_augmentation.search_routing:
             ontology_parts.append(f"Ontology search routing: {', '.join(ontology_augmentation.search_routing)}")
         ontology_context = "\n".join(ontology_parts)
+    ontology_trace = _ontology_usage_trace(project_id, "literature_search", "Literature search augmentation", ontology_augmentation)
 
     if request.workflow_mode == "sota":
         try:
@@ -2536,6 +2755,7 @@ async def fetch_project_literature(project_id: int, request: FetchProjectLiterat
                     "record_count": result.get("record_count"),
                     "new_findings": len(findings),
                     "ontology_context_used": bool(ontology_context),
+                    "ontology_trace": ontology_trace.model_dump() if ontology_trace else None,
                     "workflow_trace": [item.model_dump() for item in (result.get("workflow_trace") or [])],
                 },
             )
@@ -2546,6 +2766,7 @@ async def fetch_project_literature(project_id: int, request: FetchProjectLiterat
                 processing_summary=str(result.get("processing_summary") or ""),
                 elicitation_questions=result.get("elicitation_questions") or [],
                 workflow_trace=result.get("workflow_trace") or [],
+                ontology_trace=ontology_trace,
             )
         except WorkflowError as exc:
             trace = LiteratureToolTrace(
@@ -2593,6 +2814,8 @@ async def fetch_project_literature(project_id: int, request: FetchProjectLiterat
     try:
         result = await search_literature(
             query,
+            end_product=str(request.project_end_product or project.get("end_product") or ""),
+            target_host=str(request.project_target_host or project.get("target_host") or ""),
             max_results=max_results,
             project_goal=str(request.project_goal or project.get("project_goal") or ""),
             objective_title=request.objective_title or "",
@@ -2613,6 +2836,9 @@ async def fetch_project_literature(project_id: int, request: FetchProjectLiterat
                 str(project.get("notes") or ""),
             ],
         )
+        attempts = result.get("attempts") or []
+        if attempts and all(attempt.get("error") for attempt in attempts):
+            raise RuntimeError("Literature services could not be reached. Check connectivity and retry; relevance has not been assessed.")
         records = result.get("results") or []
         existing = {str(item or "").strip().lower() for item in (request.existing_citations or []) if str(item or "").strip()}
         raw_findings: List[ResearchFinding] = []
@@ -2650,6 +2876,7 @@ async def fetch_project_literature(project_id: int, request: FetchProjectLiterat
                 "ontology_context_used": bool(ontology_context),
                 "ontology_augmentation": ontology_augmentation.model_dump() if ontology_augmentation else None,
                 "ontology_context": ontology_context,
+                "ontology_trace": ontology_trace.model_dump() if ontology_trace else None,
                 "has_processing_summary": bool(processing.get("processing_summary")),
             },
         )
@@ -2657,8 +2884,9 @@ async def fetch_project_literature(project_id: int, request: FetchProjectLiterat
             findings=findings,
             tool_trace=trace,
             objective_lens=processing.get("objective_lens"),
-            processing_summary=str(processing.get("processing_summary") or ""),
+            processing_summary=" ".join(filter(None, [result.get("screening_summary"), str(processing.get("processing_summary") or "")])),
             elicitation_questions=processing.get("elicitation_questions") or [],
+            ontology_trace=ontology_trace,
         )
     except Exception as exc:
         trace = LiteratureToolTrace(
@@ -2776,6 +3004,8 @@ async def run_project_validation_track(project_id: int, request: RunValidationTr
         return RunValidationTrackResponse(status="error", message=f"Validation run failed: {exc}", result={})
 
 
+app.include_router(paper_upload_router(db.get_project))
+
 @app.post("/api/projects/{project_id}/literature/pdf", response_model=PreparePaperPdfResponse)
 async def prepare_literature_pdf(project_id: int, request: PreparePaperPdfRequest):
     project = db.get_project(project_id)
@@ -2811,24 +3041,33 @@ async def prepare_literature_pdf(project_id: int, request: PreparePaperPdfReques
             inputs={"citation": request.finding.citation, "source_ids": request.finding.source_ids},
             outputs=ids,
         )
-    if not ids.get("pmid") and not ids.get("pmcid") and not ids.get("doi"):
+    uploaded_id = request.finding.source_ids.get("uploaded_id", "")
+    if uploaded_id and not re.fullmatch(r"upload_[a-f0-9]{64}", uploaded_id):
+        raise HTTPException(400, "Invalid uploaded paper identifier")
+    if not uploaded_id and not ids.get("pmid") and not ids.get("pmcid") and not ids.get("doi"):
         return PreparePaperPdfResponse(
             status="error",
             message="Could not identify a PMID, PMCID, or DOI from this literature finding. Try adding a PMID/PMCID/DOI to the citation or labels.",
             workflow_trace=workflow_logger.trace if workflow_logger else [],
         )
 
-    output_root = Path(os.getenv("PAPER_EVIDENCE_ROOT") or "data/paper_evidence") / f"project_{project_id}"
+    output_root = paper_evidence_root() / f"project_{project_id}"
     try:
         download_stage = workflow_logger.start("open_access_pdf_download", inputs=ids) if workflow_logger else None
         try:
-            download = await download_open_access_pdf(
-                pmid=ids.get("pmid", ""),
-                pmcid=ids.get("pmcid", ""),
-                doi=ids.get("doi", ""),
-                pdf_url=ids.get("pdf_url", ""),
-                output_dir=output_root,
-            )
+            if uploaded_id:
+                uploaded_path = output_root / uploaded_id / "original.pdf"
+                if not uploaded_path.is_file():
+                    raise HTTPException(404, "Uploaded PDF is missing; attach it again")
+                download = {"status": "success", "original_pdf_path": str(uploaded_path), "paper_id": uploaded_id}
+            else:
+                download = await download_open_access_pdf(
+                    pmid=ids.get("pmid", ""),
+                    pmcid=ids.get("pmcid", ""),
+                    doi=ids.get("doi", ""),
+                    pdf_url=ids.get("pdf_url", ""),
+                    output_dir=output_root,
+                )
         except Exception as exc:
             if workflow_logger and download_stage is not None:
                 workflow_logger.end(
@@ -2870,6 +3109,7 @@ async def prepare_literature_pdf(project_id: int, request: PreparePaperPdfReques
                 current_objective_title = str(request.objective_title or "")
                 if (
                     cached_query == request.query
+                    and cached_annotation.get("evidence_contract_version") == 4
                     and cached_objective_id == current_objective_id
                     and cached_objective_title == current_objective_title
                 ):
@@ -3016,6 +3256,7 @@ async def prepare_literature_pdf(project_id: int, request: PreparePaperPdfReques
             json.dumps(
                 {
                     "finding": request.finding.model_dump(),
+                    "evidence_contract_version": 4,
                     "query": request.query,
                     "objective_id": request.objective_id,
                     "objective_title": request.objective_title,
@@ -3082,11 +3323,23 @@ async def prepare_literature_pdf(project_id: int, request: PreparePaperPdfReques
         ) from exc
 
 
-@app.get("/api/projects/{project_id}/literature/pdf/{paper_id}/annotated")
+@app.api_route("/api/projects/{project_id}/literature/pdf/{paper_id}/original", methods=["GET", "HEAD"])
+async def get_original_literature_pdf(project_id: int, paper_id: str):
+    safe_id = re.sub(r"[^A-Za-z0-9_.-]+", "_", paper_id).strip("_")
+    root = (paper_evidence_root() / f"project_{project_id}").resolve()
+    candidate = (root / safe_id / "original.pdf").resolve()
+    if root not in candidate.parents or not candidate.is_file():
+        raise HTTPException(status_code=404, detail="Original PDF not found")
+    return FileResponse(str(candidate), media_type="application/pdf", headers={
+        "Content-Disposition": f'inline; filename="{safe_id}_original.pdf"',
+        "X-Content-Type-Options": "nosniff"})
+
+
+@app.api_route("/api/projects/{project_id}/literature/pdf/{paper_id}/annotated", methods=["GET", "HEAD"])
 async def get_annotated_literature_pdf(project_id: int, paper_id: str):
     safe_id = re.sub(r"[^A-Za-z0-9_.-]+", "_", paper_id).strip("_")
-    candidate = (Path(os.getenv("PAPER_EVIDENCE_ROOT") or "data/paper_evidence") / f"project_{project_id}" / safe_id / "annotated.pdf").resolve()
-    root = (Path(os.getenv("PAPER_EVIDENCE_ROOT") or "data/paper_evidence") / f"project_{project_id}").resolve()
+    candidate = (paper_evidence_root() / f"project_{project_id}" / safe_id / "annotated.pdf").resolve()
+    root = (paper_evidence_root() / f"project_{project_id}").resolve()
     if root not in candidate.parents or not candidate.exists():
         raise HTTPException(status_code=404, detail="Annotated PDF not found")
     return FileResponse(
@@ -3260,6 +3513,8 @@ async def generate_objectives(request: ObjectivesRequest):
         
         used_fallback = False
         fallback_reason = ""
+        cache_hit = False
+        objective_model = os.getenv("OLLAMA_OBJECTIVE_MODEL") or os.getenv("OLLAMA_SOTA_MODEL") or ollama.model
         try:
             prompt = _assemble_prompt(
                 system_instruction="Follow safety and formatting policy. Return strict JSON only.",
@@ -3268,7 +3523,38 @@ async def generate_objectives(request: ObjectivesRequest):
             )
             print(f"DEBUG: Generated prompt length: {len(prompt)} chars")
 
-            response_data = await ollama.generate_json(prompt)
+            cache_inputs = {
+                "version": 1,
+                "model": objective_model,
+                "temperature": 0.2,
+                "top_p": 0.9,
+                "prompt": prompt,
+            }
+            cache_key = db.llm_cache_key("objectives", cache_inputs)
+            cached = db.get_llm_cache(cache_key)
+            if cached:
+                response_data = cached.get("payload") or {}
+                cache_hit = True
+                used_fallback = bool((cached.get("metadata") or {}).get("used_fallback"))
+                fallback_reason = str((cached.get("metadata") or {}).get("fallback_reason") or "")
+            elif os.getenv("OLLAMA_OBJECTIVES_ENABLED", "1") == "0":
+                raise RuntimeError("OLLAMA_OBJECTIVES_ENABLED=0")
+            else:
+                response_data = await ollama.generate_json(
+                    prompt,
+                    max_retries=0,
+                    temperature=0.2,
+                    top_p=0.9,
+                    model=objective_model,
+                    timeout_seconds=_env_float("OLLAMA_OBJECTIVE_TIMEOUT_SECONDS", 20.0),
+                )
+                db.upsert_llm_cache(
+                    cache_key=cache_key,
+                    task_type="objectives",
+                    model=objective_model,
+                    payload=response_data,
+                    metadata={"used_fallback": False},
+                )
             print(f"DEBUG: Raw response type: {type(response_data)}")
             print(f"DEBUG: Response keys: {list(response_data.keys()) if response_data else 'None'}")
 
@@ -3284,6 +3570,35 @@ async def generate_objectives(request: ObjectivesRequest):
             fallback = _fallback_objective_clusters(request)
             objectives = fallback.objectives
             global_questions = fallback.global_questions
+            if os.getenv("OLLAMA_CACHE_FALLBACKS", "1") != "0":
+                try:
+                    prompt = _assemble_prompt(
+                        system_instruction="Follow safety and formatting policy. Return strict JSON only.",
+                        persona_id=request.persona_id,
+                        task_context=ollama.get_objectives_prompt(request.query, request.context, request.k),
+                    )
+                    cache_key = db.llm_cache_key(
+                        "objectives",
+                        {
+                            "version": 1,
+                            "model": objective_model,
+                            "temperature": 0.2,
+                            "top_p": 0.9,
+                            "prompt": prompt,
+                        },
+                    )
+                    db.upsert_llm_cache(
+                        cache_key=cache_key,
+                        task_type="objectives",
+                        model=objective_model,
+                        payload={
+                            "objectives": [item.model_dump() for item in objectives],
+                            "global_questions": global_questions,
+                        },
+                        metadata={"used_fallback": True, "fallback_reason": fallback_reason[:500]},
+                    )
+                except Exception:
+                    pass
             print(f"DEBUG: Falling back to deterministic objective clusters: {fallback_reason}")
         
         # Log event
@@ -3294,6 +3609,8 @@ async def generate_objectives(request: ObjectivesRequest):
             "has_prior": prior is not None,
             "used_fallback": used_fallback,
             "fallback_reason": fallback_reason[:200] if fallback_reason else None,
+            "cache_hit": cache_hit,
+            "model": objective_model,
         })
         
         return ObjectivesResponse(
@@ -3468,7 +3785,14 @@ def _workspace_memory_row_to_response(row: Optional[dict]) -> Optional[Workspace
     )
 
 
-def _compact_explicit_state_for_prompt(explicit_state: Dict[str, Any]) -> Dict[str, Any]:
+def _compact_explicit_state_for_prompt(explicit_state: Dict[str, Any], workspace_key: Optional[str] = None) -> Dict[str, Any]:
+    if workspace_key:
+        from research_board import BoardRepository, confirmed_rule_context, clean, board_scope_key
+        board = BoardRepository(db.db_path).get(board_scope_key(workspace_key))
+        explicit_state = dict(explicit_state)
+        explicit_state["confirmed_research_rules"] = (
+            confirmed_rule_context(board) if board and board.grounding_version == 2 and board.query == clean(explicit_state.get("query"), 1800) else []
+        )
     keys = [
         "query",
         "context_blob",
@@ -3480,6 +3804,10 @@ def _compact_explicit_state_for_prompt(explicit_state: Dict[str, Any]) -> Dict[s
         "objective_answers",
         "global_question_answers",
         "reasoning_notes",
+        "unresolved_user_owned_decisions",
+        "adaptive_elicitation_session",
+        "tacit_elicitation_answers",
+        "confirmed_research_rules",
         "research_work_template",
         "agentic_plan",
         "execution_run",
@@ -3703,9 +4031,123 @@ async def save_workspace_memory(workspace_key: str, request: WorkspaceMemoryRequ
     return WorkspaceMemoryResponse(memory=_workspace_memory_row_to_response(row))
 
 
+@app.post("/api/adaptive-elicitation/start", response_model=AdaptiveElicitationResponse)
+async def start_adaptive_elicitation(request: StartAdaptiveElicitationRequest):
+    compact_state = _compact_explicit_state_for_prompt(request.explicit_state or {}, request.workspace_key)
+    context_digest = json.dumps(compact_state, ensure_ascii=False, default=str)
+    generation_source = "model"
+    harness_result = None
+    try:
+        literature_sources = extract_literature_sources(compact_state)
+        if literature_sources:
+            async def generate_harness_json(prompt: str, **kwargs: Any) -> Dict[str, Any]:
+                return await ollama.generate_json_cached(
+                    cache=db,
+                    task_type="epistemic_gap_harness",
+                    prompt=prompt,
+                    cache_version=1,
+                    cache_inputs={"workspace_key": request.workspace_key},
+                    **kwargs,
+                )
+
+            harness_result = await run_epistemic_gap_harness(
+                workspace_context=compact_state,
+                sources=literature_sources,
+                generate_json=generate_harness_json,
+                max_concurrency=1,
+            )
+            raw_payload = harness_result.elicitation_payload
+            generation_source = "harness"
+        else:
+            raw_payload = await ollama.generate_json(
+                build_adaptive_elicitation_prompt(compact_state),
+                max_retries=1,
+                temperature=0.2,
+                top_p=0.9,
+                timeout_seconds=60,
+            )
+        session = create_adaptive_elicitation_session(
+            workspace_key=request.workspace_key,
+            context_digest=context_digest,
+            raw_payload=raw_payload,
+            generation_source=generation_source,
+            max_questions=request.max_questions,
+            min_information_gain=request.min_information_gain,
+            min_geodesic_gain=request.min_geodesic_gain,
+            max_normalized_uncertainty_for_stop=request.max_normalized_uncertainty_for_stop,
+            robust_quantile=request.robust_quantile,
+            cost_per_second=request.cost_per_second,
+            min_net_value=request.min_net_value,
+        )
+        if harness_result is not None:
+            session.epistemic_trace = {
+                "run_id": harness_run_id(harness_result),
+                **harness_result.trace(),
+            }
+    except Exception as exc:
+        if request.require_generative:
+            raise HTTPException(
+                status_code=503,
+                detail=f"Generative adaptive elicitation could not produce a validated question set: {exc}",
+            ) from exc
+        generation_source = "fallback"
+        session = create_adaptive_elicitation_session(
+            workspace_key=request.workspace_key,
+            context_digest=context_digest,
+            raw_payload=fallback_adaptive_elicitation_payload(compact_state),
+            generation_source="fallback",
+            max_questions=request.max_questions,
+            min_information_gain=request.min_information_gain,
+            min_geodesic_gain=request.min_geodesic_gain,
+            max_normalized_uncertainty_for_stop=request.max_normalized_uncertainty_for_stop,
+            robust_quantile=request.robust_quantile,
+            cost_per_second=request.cost_per_second,
+            min_net_value=request.min_net_value,
+        )
+    await log_event_safe(
+        "adaptive_elicitation_started",
+        {
+            "workspace_key": request.workspace_key,
+            "generation_source": generation_source,
+            "belief_variables": len(session.belief_variables),
+            "candidate_questions": len(session.candidate_questions),
+            "initial_entropy": session.initial_entropy,
+            "initial_bayes_risk": session.initial_bayes_risk,
+            "decision_model_source": session.decision_model_source,
+            "epistemic_harness": bool(session.epistemic_trace),
+            "epistemic_gap_count": session.epistemic_trace.get("gap_count", 0),
+        },
+    )
+    return AdaptiveElicitationResponse(session=session)
+
+
+@app.post("/api/adaptive-elicitation/answer", response_model=AdaptiveElicitationResponse)
+async def answer_adaptive_elicitation(request: AnswerAdaptiveElicitationRequest):
+    try:
+        session = answer_adaptive_elicitation_question(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    latest = session.answer_history[-1] if session.answer_history else None
+    await log_event_safe(
+        "adaptive_elicitation_answered",
+        {
+            "workspace_key": session.workspace_key,
+            "session_id": session.id,
+            "question_id": request.question_id,
+            "option_id": request.option_id,
+            "information_gain": latest.information_gain if latest else 0.0,
+            "current_entropy": session.current_entropy,
+            "current_bayes_risk": session.current_bayes_risk,
+            "current_best_action_id": session.current_best_action_id,
+            "status": session.status,
+        },
+    )
+    return AdaptiveElicitationResponse(session=session)
+
+
 @app.post("/api/workspace-memory/infer", response_model=InferWorkspaceMemoryResponse)
 async def infer_workspace_memory(request: InferWorkspaceMemoryRequest):
-    compact_state = _compact_explicit_state_for_prompt(request.explicit_state or {})
+    compact_state = _compact_explicit_state_for_prompt(request.explicit_state or {}, request.workspace_key)
     prompt = f"""
 Infer reviewable tacit workspace memory for a scientific planning workspace.
 
@@ -3766,12 +4208,6 @@ Return:
                 questions.append(TacitElicitationQuestion.model_validate(item))
             except Exception:
                 continue
-        fallback_questions = _fallback_tacit_elicitation_questions(request.explicit_state or {})
-        existing_question_ids = {item.id for item in questions}
-        for item in fallback_questions:
-            if item.id not in existing_question_ids:
-                questions.append(item)
-                existing_question_ids.add(item.id)
         handoff_summary = str(response_data.get("handoff_summary") or "").strip()
         if not items and not handoff_summary and not questions:
             return _fallback_tacit_memory(request)
@@ -3956,7 +4392,7 @@ async def export_diagnostics(
             if config_path and Path(config_path).exists():
                 zipf.write(Path(config_path), "runtime/app-config.json")
 
-            evidence_root = Path(os.getenv("PAPER_EVIDENCE_ROOT") or "data/paper_evidence")
+            evidence_root = paper_evidence_root()
             if project_id is not None:
                 _add_tree_to_zip(zipf, evidence_root / f"project_{project_id}", f"paper_evidence/project_{project_id}", include_pdfs)
             else:
@@ -4061,6 +4497,12 @@ async def refactor_personas_from_interactions():
 async def health_check():
     """Health check endpoint."""
     return {"status": "healthy", "service": "SECI Query Explorer API"}
+
+
+@app.get("/api/metrics/llm")
+async def llm_metrics():
+    """Return process-local inference latency, throughput, error, and cache metrics."""
+    return ollama.metrics_snapshot()
 
 @app.get("/context/list", response_model=ContextListResponse)
 async def context_list(path: Optional[str] = None):
@@ -4922,6 +5364,8 @@ async def log_event_safe(event_type: str, payload: dict):
 async def _start_background_persona_refactor():
     global _persona_refactor_task
 
+    await ollama.start(preload=os.getenv("OLLAMA_PRELOAD", "1") != "0")
+
     try:
         db.mark_incomplete_execution_runs_failed("Server restarted before the execution run finished.")
     except Exception:
@@ -4942,17 +5386,20 @@ async def _start_background_persona_refactor():
 @app.on_event("shutdown")
 async def _stop_background_persona_refactor():
     global _persona_refactor_task
-    for task in list(_project_execution_tasks.values()):
+    execution_tasks = list(_project_execution_tasks.values())
+    for task in execution_tasks:
         task.cancel()
+    if execution_tasks:
+        await asyncio.gather(*execution_tasks, return_exceptions=True)
     _project_execution_tasks.clear()
-    if _persona_refactor_task is None:
-        return
-    _persona_refactor_task.cancel()
-    try:
-        await _persona_refactor_task
-    except Exception:
-        pass
-    _persona_refactor_task = None
+    if _persona_refactor_task is not None:
+        _persona_refactor_task.cancel()
+        try:
+            await _persona_refactor_task
+        except BaseException:
+            pass
+        _persona_refactor_task = None
+    await ollama.close()
 
 if __name__ == "__main__":
     import uvicorn
