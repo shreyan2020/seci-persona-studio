@@ -1,10 +1,7 @@
 import asyncio
 import os
 import unittest
-from unittest.mock import AsyncMock, Mock
-
-import httpx
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import httpx
 

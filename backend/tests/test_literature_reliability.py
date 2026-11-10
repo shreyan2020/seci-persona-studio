@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from main import _literature_record_to_research_finding, _synthesize_literature_processing
 from models import FetchProjectLiteratureRequest, ResearchFinding

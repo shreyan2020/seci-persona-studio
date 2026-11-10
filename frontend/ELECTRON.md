@@ -1,61 +1,41 @@
-﻿# Desktop App (Windows)
+# Desktop app
 
-This project now supports a native desktop shell using Electron.
+The Electron wrapper runs the same frontend and backend in a desktop window.
+Install Node.js, Python 3.11+, and Ollama separately. Pull the model you plan to use.
 
-## Prerequisites
-- Node.js installed
-- Python installed and available in PATH
-- Backend dependencies installed: `pip install -r ../backend/requirements.txt`
-- Ollama installed and running
-- Required Ollama model pulled (as configured by backend env)
+## Development
 
-## Run desktop in dev mode
-From `frontend`:
+From `frontend`, with your Python environment activated:
 
 ```powershell
-npm install
+npm ci
+python -m pip install -r ../backend/requirements.txt
 npm run desktop:dev
 ```
 
-This starts:
-- FastAPI on `127.0.0.1:8000`
-- Next.js on `localhost:3000`
-- Electron app window
+This starts FastAPI on port 8000, Next.js on port 3000, and the Electron window.
 
-## Build Windows installer (.exe)
-From `frontend`:
+## Windows installer
 
 ```powershell
-npm install
 npm run desktop:dist:win
 ```
 
-Output will be under `frontend/dist` (NSIS setup `.exe`).
+The NSIS installer is written to `frontend/dist`. The package includes frontend
+and backend code; Python, Python dependencies, and Ollama must be available on
+the machine where it runs. Writable application data is stored in the application
+user-data directory.
 
-## Runtime behavior of packaged app
-- Frontend server is bundled and started by Electron.
-- Backend code is bundled and started by Electron.
-- Ollama is NOT bundled; user must install/run it separately.
-- Backend writable runtime data goes to the app user data directory.
+## Model configuration
 
-## Ollama model config
-The packaged app creates a user-editable config file on first launch:
-
-`%APPDATA%\SECI Persona Studio\app-config.json`
-
-Example:
+The packaged app creates `app-config.json` in its application user-data directory
+on first launch:
 
 ```json
 {
   "ollamaBaseUrl": "http://localhost:11434",
-  "ollamaModel": "qwen2.5:7b"
+  "ollamaModel": "qwen3.5:latest"
 }
 ```
 
-You can change `ollamaModel` to any model you have pulled locally, for example:
-
-```powershell
-ollama pull llama3.1:8b
-```
-
-Then update `app-config.json` and restart the app.
+Change `ollamaModel` to another installed model and restart the app to use it.

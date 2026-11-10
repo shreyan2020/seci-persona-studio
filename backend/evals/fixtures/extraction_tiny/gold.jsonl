@@ -1,2 +1,0 @@
-{"paper_id":"paper-1","entities":[{"id":"e1","label":"resveratrol","type":"chemical"},{"id":"e2","label":"Saccharomyces cerevisiae","type":"species"},{"id":"e3","label":"malonyl-CoA","type":"chemical"}],"relations":[{"source":"e2","relation":"produces","target":"e1"},{"source":"e3","relation":"precursor_for","target":"e1"}]}
-

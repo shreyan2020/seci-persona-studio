@@ -1,11 +1,13 @@
 # Interface workspace
 
-This repository owns the SECI Persona Studio application and portable public example.
-The sibling `dsm-interface` workspace owns ongoing research experiments and their chats.
-Do not modify that research workspace as part of routine interface changes.
+This repository owns the SECI Persona Studio application and its public example.
+Ongoing research experiments belong in the sibling `dsm-interface` workspace.
 
-Keep runtime databases, interviews, full PDFs, and local model responses out of commits.
-The bundled example is a curated, source-reviewed snapshot; preserve its provenance.
-Verify frontend changes with TypeScript and a production build. Use relevant backend
-unit tests for evidence, role orchestration, and reversible decision-rule changes.
-Historical evaluation reports in docs are snapshots, not newly run experiments.
+Document only functionality implemented and connected to this workspace. Keep
+research proposals, external experiment results, and unimplemented features out
+of the README and application documentation.
+
+Keep runtime databases, interviews, full PDFs, and local model responses out of Git.
+Preserve the bundled example's source attribution and edited-output provenance.
+Keep application tests in `backend/tests` and `frontend/tests`; do not add one-off
+demo or audit runners to the application root. See `docs/testing.md` for commands.

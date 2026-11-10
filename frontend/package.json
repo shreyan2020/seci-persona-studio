@@ -10,9 +10,9 @@
     "lint": "eslint .",
     "desktop:open": "set ELECTRON_DEV=1&& set ELECTRON_WEB_URL=http://localhost:3000&& electron .",
     "desktop:dev": "concurrently -k -n API,WEB,DESKTOP -c magenta,cyan,green \"python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload --app-dir ../backend\" \"next dev -p 3000\" \"wait-on tcp:3000 tcp:8000 && npm run desktop:open\"",
-    "desktop:build-note": "echo Packaging is not configured yet; this starts a native desktop preview.",
     "desktop:pack": "npm run build && electron-builder --dir",
-    "desktop:dist:win": "npm run build && electron-builder --win nsis"
+    "desktop:dist:win": "npm run build && electron-builder --win nsis",
+    "test": "node --test tests/*.test.cjs"
   },
   "dependencies": {
     "next": "^16.1.6",
